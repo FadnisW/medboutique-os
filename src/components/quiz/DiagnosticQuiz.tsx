@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Lock, Download, Stethoscope, Droplets, Zap, ChevronRight, Activity } from "lucide-react";
 
 export function DiagnosticQuiz() {
@@ -404,19 +405,19 @@ export function DiagnosticQuiz() {
                 <Droplets className="w-8 h-8 text-[var(--teal)] mb-4" />
                 <h3 className="font-display text-xl font-semibold mb-2">HydraFacial</h3>
                 <p className="text-sm text-[var(--on-surface-variant)] mb-4">Deep cleansing and active hydration for your midday shine.</p>
-                <a href="#" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</a>
+                <Link href="/treatments/aesthetic" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</Link>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-[var(--surface-dim)] elevated-shadow">
                 <Zap className="w-8 h-8 text-[var(--pink)] mb-4" />
                 <h3 className="font-display text-xl font-semibold mb-2">Chemical Peel</h3>
                 <p className="text-sm text-[var(--on-surface-variant)] mb-4">Targeted exfoliation to address pigmentation risks safely.</p>
-                <a href="#" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</a>
+                <Link href="/treatments/aesthetic" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</Link>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-[var(--surface-dim)] elevated-shadow">
                 <Stethoscope className="w-8 h-8 text-blue-500 mb-4" />
                 <h3 className="font-display text-xl font-semibold mb-2">Microneedling RF</h3>
                 <p className="text-sm text-[var(--on-surface-variant)] mb-4">Advanced collagen induction for overall texture refinement.</p>
-                <a href="#" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</a>
+                <Link href="/treatments/aesthetic" className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors">Learn More &rarr;</Link>
               </div>
             </div>
 
@@ -431,9 +432,9 @@ export function DiagnosticQuiz() {
             </div>
 
             <div className="space-y-4">
-              <a href="/book" className="block w-full text-center bg-gradient-to-r from-slate-800 to-[var(--primary)] text-white py-4 rounded-xl font-medium text-lg shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] transition-all">
+              <Link href="/book" className="block w-full text-center bg-gradient-to-r from-slate-800 to-[var(--primary)] text-white py-4 rounded-xl font-medium text-lg shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] transition-all">
                 Book Your Free Consultation &rarr;
-              </a>
+              </Link>
               <button className="block w-full text-center text-[var(--on-surface-variant)] font-medium py-2 hover:text-[var(--primary)] transition-colors inline-flex items-center justify-center gap-2">
                 <Download className="w-4 h-4" /> Download my results PDF
               </button>

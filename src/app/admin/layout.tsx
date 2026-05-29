@@ -101,9 +101,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-[var(--background)]">
+      <main className="flex-1 overflow-y-auto bg-[var(--background)] pb-20 md:pb-0">
         {children}
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex items-center justify-around py-2 px-1 z-50 shadow-[0_-4px_24px_rgba(0,0,0,0.2)]">
+        {[...navLinks, { name: "Settings", href: "/admin/settings", icon: Settings }].map((link) => {
+          const isActive = link.href === "/admin" 
+            ? pathname === "/admin" 
+            : pathname?.startsWith(link.href);
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`flex flex-col items-center gap-0.5 py-1 px-1 rounded-lg transition-all ${
+                isActive ? "text-[var(--teal-light)] font-semibold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[9px] font-sans tracking-tight">{link.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
