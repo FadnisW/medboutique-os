@@ -97,7 +97,7 @@ export default function AdminCalendarPage() {
                         key={apt.id}
                         onMouseEnter={() => setTooltip(apt.id)}
                         onMouseLeave={() => setTooltip(null)}
-                        className={`absolute inset-x-1 top-1 rounded-lg px-2 py-1 cursor-pointer z-10 text-xs font-medium transition-all hover:brightness-110 ${typeStyles[apt.type]}`}
+                        className={`absolute inset-x-1 top-1 rounded-lg px-2 py-1 cursor-pointer text-xs font-medium transition-all hover:brightness-110 ${typeStyles[apt.type]} ${tooltip === apt.id ? "z-30 shadow-2xl scale-[1.02]" : "z-10"}`}
                         style={{ height: `${apt.duration * 36 - 4}px` }}
                       >
                         {apt.patient && <p className="font-semibold truncate">{apt.patient}</p>}
