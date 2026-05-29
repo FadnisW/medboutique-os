@@ -54,6 +54,7 @@ model PatientProfile {
   patientRecords PatientRecord[]
   invoices       Invoice[]
   diagnostics    DiagnosticSubmission[]
+  carePlans      CarePlan[]
 
   @@map("patient_profiles")
 }
@@ -204,4 +205,40 @@ model AuditLog {
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("audit_logs")
+}
+
+model CarePlan {
+  id           String         @id @default(cuid())
+  patientId    String         @map("patient_id")
+  assignedBy   String         @map("assigned_by") // e.g. "Dr. Aisha Rao"
+  protocolName String         @map("protocol_name") // e.g. "Post-HydraFacial Protocol"
+  tip          String?        @db.Text // Practitioner's daily clinical tip
+  startDate    DateTime       @default(now()) @map("start_date")
+  endDate      DateTime?      @map("end_date")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  patient      PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  tasks        CarePlanTask[]
+
+  @@map("care_plans")
+}
+
+enum TimeOfDay {
+  MORNING
+  EVENING
+}
+
+model CarePlanTask {
+  id            String    @id @default(cuid())
+  carePlanId    String    @map("care_plan_id")
+  title         String
+  instruction   String    @db.Text
+  timeOfDay     TimeOfDay @map("time_of_day")
+  scheduledTime String    @map("scheduled_time") // e.g. "08:00 AM"
+  completed     Boolean   @default(false)
+
+  carePlan      CarePlan  @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+
+  @@map("care_plan_tasks")
 }
