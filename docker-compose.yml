@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medboutique_app
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.development
+    networks:
+      - medboutique-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: medboutique_db
+    ports:
+      - "5433:5432" # Mapping to 5433 on host as requested
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medboutique}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medboutique_dev_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-medboutique_dev}
+    volumes:
+      - medboutique_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medboutique} -d ${POSTGRES_DB:-medboutique_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medboutique-network
+    restart: unless-stopped
+
+volumes:
+  medboutique_pgdata:
+
+networks:
+  medboutique-network:
+    driver: bridge

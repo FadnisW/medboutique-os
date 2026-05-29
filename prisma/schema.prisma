@@ -1,0 +1,207 @@
+// file: prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  PATIENT
+  RECEPTIONIST
+  DOCTOR
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  role          Role           @default(PATIENT)
+  phone         String?        @unique
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  patientProfile PatientProfile?
+  doctorProfile  DoctorProfile?
+  staffProfile   StaffProfile?
+  auditLogs      AuditLog[]
+}
+
+model PatientProfile {
+  id             String          @id @default(cuid())
+  userId         String          @unique @map("user_id")
+  dob            DateTime?
+  gender         String?
+  bloodGroup     String?
+  medicalHistory String?         @db.Text
+  address        String?
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+  patientRecords PatientRecord[]
+  invoices       Invoice[]
+  diagnostics    DiagnosticSubmission[]
+
+  @@map("patient_profiles")
+}
+
+model DoctorProfile {
+  id                      String             @id @default(cuid())
+  userId                  String             @unique @map("user_id")
+  specialty               String
+  qualifications          String             // e.g. "MD, DNB (Dermatology)"
+  consultationFee         Decimal            @db.Decimal(10, 2)
+  googleCalendarSyncToken String?
+
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots                   AvailabilitySlot[]
+  appointments            Appointment[]
+
+  @@map("doctor_profiles")
+}
+
+model StaffProfile {
+  id             String          @id @default(cuid())
+  userId         String          @unique @map("user_id")
+  permissions    String[]        // Array of granular capability tags
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("staff_profiles")
+}
+
+model AvailabilitySlot {
+  id             String          @id @default(cuid())
+  doctorId       String          @map("doctor_id")
+  startTime      DateTime        @map("start_time")
+  endTime        DateTime        @map("end_time")
+  isBooked       Boolean         @default(false) @map("is_booked")
+
+  doctor         DoctorProfile   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment    Appointment?
+
+  @@index([startTime, isBooked])
+  @@map("availability_slots")
+}
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  patientId          String            @map("patient_id")
+  doctorId           String            @map("doctor_id")
+  slotId             String            @unique @map("slot_id")
+  status             AppointmentStatus @default(PENDING_PAYMENT)
+  reason             String?           @db.Text
+  notes              String?           @db.Text
+  paymentId          String?           @unique @map("payment_id") // Relates to Payment table
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  patient            PatientProfile    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor             DoctorProfile     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  slot               AvailabilitySlot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  payment            Payment?          @relation(fields: [paymentId], references: [id])
+
+  @@index([status])
+  @@map("appointments")
+}
+
+model Payment {
+  id                 String            @id @default(cuid())
+  amount             Decimal           @db.Decimal(10, 2)
+  currency           String            @default("INR")
+  gatewayReference   String            @unique @map("gateway_reference") // Razorpay Payment ID
+  status             String            // e.g. "SUCCESS", "FAILED"
+  createdAt          DateTime          @default(now())
+
+  appointment        Appointment?
+  invoice            Invoice?
+
+  @@map("payments")
+}
+
+model PatientRecord {
+  id                 String            @id @default(cuid())
+  patientId          String            @map("patient_id")
+  clinicalNotes      String            @db.Text @map("clinical_notes")
+  prescription       String?           @db.Text // Encrypted JSON payload containing medicines
+  diagnosis          String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  patient            PatientProfile    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  attachments        Attachment[]
+
+  @@map("patient_records")
+}
+
+model Attachment {
+  id                 String            @id @default(cuid())
+  recordId           String            @map("record_id")
+  fileUrl            String            @map("file_url")
+  fileType           String            @map("file_type")
+  description        String?
+  createdAt          DateTime          @default(now())
+
+  record             PatientRecord     @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model Invoice {
+  id                 String            @id @default(cuid())
+  patientId          String            @map("patient_id")
+  paymentId          String?           @unique @map("payment_id")
+  amountDue          Decimal           @db.Decimal(10, 2) @map("amount_due")
+  amountPaid         Decimal           @db.Decimal(10, 2) @map("amount_paid")
+  status             String            // "PAID", "PARTIAL", "UNPAID"
+  invoicePdfUrl      String?           @map("invoice_pdf_url")
+  createdAt          DateTime          @default(now())
+
+  patient            PatientProfile    @relation(fields: [patientId], references: [id])
+  payment            Payment?          @relation(fields: [paymentId], references: [id])
+
+  @@map("invoices")
+}
+
+model DiagnosticSubmission {
+  id                 String            @id @default(cuid())
+  patientId          String?           @map("patient_id")
+  leadName           String            @map("lead_name")
+  leadEmail          String            @map("lead_email")
+  leadPhone          String            @map("lead_phone")
+  quizType           String            @map("quiz_type") // e.g. "SKIN_TYPE", "IVF_ESTIMATOR"
+  answers            Json              // Structured user response
+  recommendation     String            @db.Text
+  createdAt          DateTime          @default(now())
+
+  patient            PatientProfile?   @relation(fields: [patientId], references: [id])
+
+  @@map("diagnostic_submissions")
+}
+
+model AuditLog {
+  id                 String            @id @default(cuid())
+  userId             String            @map("user_id")
+  action             String            // e.g. "VIEW_RECORD", "DELETE_APPOINTMENT"
+  entity             String            // e.g. "PatientRecord", "Appointment"
+  entityId           String            @map("entity_id")
+  ipAddress          String?           @map("ip_address")
+  timestamp          DateTime          @default(now())
+
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}

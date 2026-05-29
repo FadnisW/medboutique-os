@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Playfair_Display, Inter, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-
+import { Providers } from "@/app/providers";
 const playfair = Playfair_Display({
   subsets: ["latin"],
   variable: "--font-display",
@@ -24,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("scroll-smooth", playfair.variable, "font-sans", geist.variable)}>
       <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)] font-sans antialiased selection:bg-[var(--tertiary-fixed)] selection:text-[var(--teal-dark)]">
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

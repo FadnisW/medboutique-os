@@ -5,12 +5,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Lock, Download, Stethoscope, Droplets, Zap, ChevronRight, Activity } from "lucide-react";
 
+/**
+ * DiagnosticQuiz component provides a multi-step interactive quiz to assess the user's skin concerns.
+ * It manages state for the current step, form inputs, and processing status, 
+ * eventually displaying an AI-generated skin analysis score and recommendations.
+ */
 export function DiagnosticQuiz() {
+  // State for navigating between quiz steps and handling submission flow
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
-  // State for form inputs
+  // State for form inputs across different steps
   const [concerns, setConcerns] = useState<string[]>([]);
   const [skinProfile, setSkinProfile] = useState({
     type: "",

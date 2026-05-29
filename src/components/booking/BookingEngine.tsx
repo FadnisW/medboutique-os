@@ -5,12 +5,18 @@ import { Drawer } from "vaul";
 import { format, addDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Calendar, Clock, ArrowRight, User } from "lucide-react";
 
+/**
+ * BookingEngine component handles the appointment scheduling flow.
+ * It provides a calendar interface for date selection, time slots, 
+ * and a drawer for finalizing the booking details.
+ */
 export function BookingEngine() {
+  // State for tracking user selections and UI state
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Generate some fake time slots
+  // Hardcoded mock time slots for prototype presentation
   const timeSlots = ["09:00 AM", "10:30 AM", "01:00 PM", "02:30 PM", "04:00 PM"];
 
   return (
