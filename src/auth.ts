@@ -33,19 +33,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         });
 
-        // Ensure user exists and has a hashed password
-        if (!user || !user.passwordHash) {
-          return null;
-        }
+        // Use a dummy hash for constant-time comparison to prevent user enumeration via timing attacks
+        const dummyHash = "$2a$12$LRY3f4/b7jY.k.6QzKzve.7Z0J3Yw9H2E3W.t2x4nE7k4C4O0S5.y";
+        const hashToCompare = user?.passwordHash || dummyHash;
 
-        // Verify the provided password against the hashed password
+        // Verify the provided password against the correct or dummy hashed password
         const isPasswordValid = await bcrypt.compare(
           credentials.password as string,
-          user.passwordHash
+          hashToCompare
         );
 
-        if (!isPasswordValid) {
-          return null; // Incorrect password
+        if (!user || !isPasswordValid) {
+          return null; // Incorrect email or password (constant time response)
         }
 
         // Return a partial user object to be stored in the session
@@ -64,8 +63,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      */
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = user.role;
+        token.id = user.id as string;
+        token.role = (user as any).role as string;
       }
       return token;
     },
@@ -83,7 +82,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt", // Use JSON Web Tokens for session handling
   },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   pages: {
     signIn: "/login", // Custom login page route
   },
+  secret: process.env.AUTH_SECRET,
 });
+

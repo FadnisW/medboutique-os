@@ -1,123 +1,441 @@
-import { FileSignature, Camera, Mic, Image as ImageIcon, Save, Paperclip } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { FileSignature, Camera, Mic, Image as ImageIcon, Save, Paperclip, AlertCircle, Plus, Sparkles, BookOpen } from "lucide-react";
+import { getPatientsAndRecords, saveSOAPNote } from "@/app/actions/notes";
 
 export default function ClinicalNotesView() {
+  const [patients, setPatients] = useState<any[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string>("");
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form states for new SOAP note
+  const [subjective, setSubjective] = useState("");
+  const [objective, setObjective] = useState("");
+  const [assessmentPlan, setAssessmentPlan] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [prescription, setPrescription] = useState("");
+  
+  // Attachments state
+  const [attachments, setAttachments] = useState<{ fileUrl: string; fileType: string; description: string }[]>([]);
+  const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
+  const [newAttachmentDesc, setNewAttachmentDesc] = useState("");
+
+  const loadData = async (patientId?: string) => {
+    setLoading(true);
+    setError(null);
+    const res = await getPatientsAndRecords(patientId);
+    if (res.success) {
+      setPatients(res.patients || []);
+      setSelectedPatient(res.selectedPatient);
+      setRecords(res.records || []);
+      if (res.selectedPatient && !patientId) {
+        setSelectedPatientId(res.selectedPatient.id);
+      }
+    } else {
+      setError(res.error || "Failed to load clinical data");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handlePatientChange = (patientId: string) => {
+    setSelectedPatientId(patientId);
+    loadData(patientId);
+  };
+
+  const handleAddAttachment = () => {
+    if (!newAttachmentUrl) return;
+    setAttachments([
+      ...attachments,
+      {
+        fileUrl: newAttachmentUrl,
+        fileType: newAttachmentUrl.endsWith(".pdf") ? "pdf" : "image",
+        description: newAttachmentDesc || "Uploaded asset",
+      },
+    ]);
+    setNewAttachmentUrl("");
+    setNewAttachmentDesc("");
+  };
+
+  const handleSave = async () => {
+    if (!selectedPatientId) {
+      alert("Please select a patient first.");
+      return;
+    }
+    if (!diagnosis) {
+      alert("Please enter a diagnosis.");
+      return;
+    }
+
+    const res = await saveSOAPNote(
+      selectedPatientId,
+      subjective,
+      objective,
+      assessmentPlan,
+      diagnosis,
+      prescription,
+      attachments
+    );
+
+    if (res.success) {
+      alert("Clinical note saved successfully.");
+      // Reset editor
+      setSubjective("");
+      setObjective("");
+      setAssessmentPlan("");
+      setDiagnosis("");
+      setPrescription("");
+      setAttachments([]);
+      // Reload records
+      loadData(selectedPatientId);
+    } else {
+      alert(res.error || "Failed to save clinical note.");
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      ? name
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2)
+      : "PT";
+  };
+
   return (
-    <div className="flex h-[calc(100vh-80px)] md:h-screen">
-      {/* Patient Sidebar Info */}
-      <div className="w-80 border-r border-slate-800 bg-slate-900/50 p-6 flex flex-col h-full overflow-y-auto hidden md:flex">
-        <div className="flex items-center justify-between mb-8">
-          <button className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-colors">
-            &larr; Back to Schedule
-          </button>
-        </div>
-        
-        <div className="mb-8">
-          <div className="w-20 h-20 rounded-2xl bg-slate-800 flex items-center justify-center mb-4 border border-slate-700">
-            <span className="font-display font-bold text-2xl text-white">EV</span>
-          </div>
-          <h2 className="font-display text-2xl font-semibold text-white mb-1">Eleanor Vance</h2>
-          <p className="text-slate-400 text-sm">32 yrs • Female • UID: #PT-8842</p>
+    <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] md:h-screen bg-[var(--background)]">
+      {/* Patient Sidebar Info & Selector */}
+      <div className="w-full md:w-80 border-r border-slate-800 bg-slate-900/50 p-6 flex flex-col h-full overflow-y-auto shrink-0">
+        <div className="mb-6">
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+            Select Patient
+          </label>
+          <select
+            value={selectedPatientId}
+            onChange={(e) => handlePatientChange(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+          >
+            {patients.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="space-y-6">
-          <div>
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Primary Concern</h4>
-            <div className="bg-slate-800 rounded-lg p-3 text-sm text-slate-300 border border-slate-700">
-              Acne scarring and uneven texture on cheeks.
+        {selectedPatient && (
+          <div className="space-y-6">
+            <div className="border-t border-slate-850 pt-4">
+              <div className="w-16 h-16 rounded-2xl bg-slate-850 flex items-center justify-center mb-3 border border-slate-750">
+                <span className="font-display font-bold text-xl text-white">
+                  {getInitials(selectedPatient.name)}
+                </span>
+              </div>
+              <h2 className="font-display text-xl font-semibold text-white mb-1">
+                {selectedPatient.name}
+              </h2>
+              <p className="text-slate-400 text-xs">
+                {selectedPatient.dob ? `${new Date().getFullYear() - new Date(selectedPatient.dob).getFullYear()} yrs` : "N/A DOB"} • {selectedPatient.gender || "Unspecified"} • {selectedPatient.bloodGroup || "Blood Group: N/A"}
+              </p>
+              <p className="text-slate-500 text-[11px] mt-1 truncate">{selectedPatient.email}</p>
+            </div>
+
+            <div className="space-y-4 border-t border-slate-850 pt-4">
+              <div>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Primary Concern</h4>
+                <div className="bg-slate-800/80 rounded-lg p-2.5 text-xs text-slate-300 border border-slate-750">
+                  {selectedPatient.medicalHistory || "No specified primary clinical concerns or history recorded."}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Previous Diagnoses</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {records.length > 0 ? (
+                    Array.from(new Set(records.map((r) => r.diagnosis))).map((diag, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex bg-slate-800 text-slate-300 text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-slate-700"
+                      >
+                        {diag}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-500 text-xs italic">No prior records.</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-
-          <div>
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Medical History</h4>
-            <div className="space-y-2">
-              <span className="inline-flex bg-[var(--pink)]/20 text-[var(--pink-light)] text-[10px] font-bold uppercase px-2 py-1 rounded">
-                Isotretinoin (2020)
-              </span>
-              <span className="inline-flex bg-slate-800 text-slate-300 text-[10px] font-bold uppercase px-2 py-1 rounded border border-slate-700">
-                Mild Rosacea
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Previous Treatments</h4>
-            <ul className="text-sm text-slate-400 space-y-1">
-              <li>• Laser Resurfacing (Session 1)</li>
-              <li>• Chemical Peel (AHA/BHA)</li>
-            </ul>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Note Editor Area */}
-      <div className="flex-1 flex flex-col h-full bg-[var(--background)]">
-        <div className="h-16 border-b border-slate-800 flex items-center justify-between px-8 shrink-0">
+      {/* SOAP Editor and Past Records */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Top bar */}
+        <div className="h-16 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 bg-slate-900/20">
           <div className="flex items-center gap-3">
             <FileSignature className="w-5 h-5 text-[var(--teal-light)]" />
-            <span className="font-medium text-white">Consultation Note — Oct 12, 2026</span>
+            <span className="font-medium text-white text-sm">
+              New EMR Consultation Record
+            </span>
           </div>
-          <button className="bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors flex items-center gap-2">
-            <Save className="w-4 h-4" /> Save & Sign
+          <button
+            onClick={handleSave}
+            className="bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-[var(--teal)] hover:text-slate-950 transition-colors flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" /> Save & Sign Note
           </button>
         </div>
 
-        <div className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-3xl mx-auto space-y-6">
-            
-            {/* Subjective */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-              <div className="bg-slate-800/50 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">S: Subjective</span>
-                <button className="text-slate-500 hover:text-[var(--teal-light)]"><Mic className="w-4 h-4" /></button>
+        {/* Workspace body */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* Active Note Editor Form */}
+          <div className="flex-1 p-6 overflow-y-auto space-y-5 border-b lg:border-b-0 lg:border-r border-slate-800">
+            {error && (
+              <div className="bg-red-950/40 border border-red-900/50 text-red-300 px-4 py-2.5 rounded-lg text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
               </div>
-              <textarea 
-                className="w-full bg-transparent p-4 text-slate-300 focus:outline-none resize-none"
+            )}
+
+            {/* Diagnosis & Prescription */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Assessment / Diagnosis *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Mild Rosacea, Acne Scarring..."
+                  value={diagnosis}
+                  onChange={(e) => setDiagnosis(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)]"
+                />
+              </div>
+
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Prescription details
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Moisturizer (CeraVe) AM/PM, Sunscreen SPF 50..."
+                  value={prescription}
+                  onChange={(e) => setPrescription(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)]"
+                />
+              </div>
+            </div>
+
+            {/* Subjective */}
+            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+              <div className="bg-slate-800/40 px-4 py-2 border-b border-slate-855 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  S: Subjective (Patient Complaints & Symptoms)
+                </span>
+                <span className="text-slate-500"><Mic className="w-3.5 h-3.5" /></span>
+              </div>
+              <textarea
+                value={subjective}
+                onChange={(e) => setSubjective(e.target.value)}
+                placeholder="Patient reports improvement in skin hydration. Minimal itching or redness..."
+                className="w-full bg-transparent p-4 text-xs text-slate-300 focus:outline-none resize-none"
                 rows={3}
-                defaultValue="Patient reports good recovery from Session 1. Erythema subsided by day 4. Complains of slight dryness in the perioral area."
               />
             </div>
 
             {/* Objective */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-              <div className="bg-slate-800/50 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">O: Objective (Findings)</span>
-                <div className="flex gap-3">
-                  <button className="text-slate-500 hover:text-[var(--teal-light)]"><Camera className="w-4 h-4" /></button>
-                  <button className="text-slate-500 hover:text-[var(--teal-light)]"><ImageIcon className="w-4 h-4" /></button>
+            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+              <div className="bg-slate-800/40 px-4 py-2 border-b border-slate-855 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  O: Objective (Clinical Observations / Findings)
+                </span>
+                <div className="flex gap-2">
+                  <span className="text-slate-500"><Camera className="w-3.5 h-3.5" /></span>
+                  <span className="text-slate-500"><ImageIcon className="w-3.5 h-3.5" /></span>
                 </div>
               </div>
-              <textarea 
-                className="w-full bg-transparent p-4 text-slate-300 focus:outline-none resize-none"
-                rows={4}
-                defaultValue="Skin appears hydrated. Minimal residual hyperpigmentation on bilateral cheeks. No active acne lesions. Mild flaking observed around the chin."
+              <textarea
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                placeholder="Erythema settled. Mild peeling observed. Skin barrier intact..."
+                className="w-full bg-transparent p-4 text-xs text-slate-300 focus:outline-none resize-none"
+                rows={3}
               />
-              
-              {/* Image Attachments */}
-              <div className="px-4 pb-4 flex gap-3">
-                <div className="w-24 h-24 rounded-lg bg-slate-800 border border-slate-700 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-700 hover:text-white transition-colors">
-                  <Camera className="w-6 h-6 mb-1" />
-                  <span className="text-[10px] font-medium">Add Photo</span>
-                </div>
-              </div>
             </div>
 
             {/* Assessment & Plan */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-              <div className="bg-slate-800/50 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">A/P: Assessment & Plan</span>
-                <button className="text-slate-500 hover:text-[var(--teal-light)]"><Paperclip className="w-4 h-4" /></button>
+            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+              <div className="bg-slate-800/40 px-4 py-2 border-b border-slate-855 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  P: Plan (Clinical Protocol / Next Steps)
+                </span>
+                <span className="text-slate-500"><Paperclip className="w-3.5 h-3.5" /></span>
               </div>
-              <textarea 
-                className="w-full bg-transparent p-4 text-slate-300 focus:outline-none resize-none"
-                rows={5}
-                defaultValue="Assessment: Excellent response to initial fractional laser therapy.
-Plan: 
-1. Proceed with Session 2 at identical settings.
-2. Prescribe heavy ceramide moisturizer for perioral dryness.
-3. Review in 4 weeks."
+              <textarea
+                value={assessmentPlan}
+                onChange={(e) => setAssessmentPlan(e.target.value)}
+                placeholder="1. Cleanse face twice daily. 2. Regular Sunscreen usage. 3. Review in 4 weeks..."
+                className="w-full bg-transparent p-4 text-xs text-slate-300 focus:outline-none resize-none"
+                rows={3}
               />
             </div>
 
+            {/* Attachment Management */}
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Add Attachment Urls
+              </h4>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  placeholder="Asset URL (e.g. image/PDF link)"
+                  value={newAttachmentUrl}
+                  onChange={(e) => setNewAttachmentUrl(e.target.value)}
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none"
+                />
+                <input
+                  type="text"
+                  placeholder="Asset Description (e.g. Face Left Profile)"
+                  value={newAttachmentDesc}
+                  onChange={(e) => setNewAttachmentDesc(e.target.value)}
+                  className="w-full sm:w-48 bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAttachment}
+                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-3 py-2 rounded-lg text-xs font-semibold"
+                >
+                  Add URL
+                </button>
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {attachments.map((att, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 bg-slate-850 border border-slate-700 px-2 py-1 rounded text-[10px] text-slate-300"
+                    >
+                      <Paperclip className="w-3 h-3 text-[var(--teal-light)]" />
+                      {att.description}
+                      <button
+                        type="button"
+                        onClick={() => setAttachments(attachments.filter((_, i) => i !== idx))}
+                        className="text-red-400 hover:text-red-300 font-bold ml-1"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Past Notes Sidebar log */}
+          <div className="w-full lg:w-96 bg-slate-900/30 p-6 overflow-y-auto h-full shrink-0 flex flex-col">
+            <h3 className="font-display text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[var(--teal-light)]" /> Past Consultations ({records.length})
+            </h3>
+            
+            <div className="space-y-4 flex-1">
+              {loading ? (
+                <p className="text-slate-500 text-xs italic">Loading records...</p>
+              ) : records.length === 0 ? (
+                <p className="text-slate-500 text-xs italic">No clinical history records found for this patient.</p>
+              ) : (
+                records.map((rec) => {
+                  let subjectiveText = "";
+                  let objectiveText = "";
+                  let planText = "";
+                  try {
+                    const parsed = JSON.parse(rec.clinicalNotes);
+                    subjectiveText = parsed.subjective || "";
+                    objectiveText = parsed.objective || "";
+                    planText = parsed.assessmentPlan || "";
+                  } catch (e) {
+                    subjectiveText = rec.clinicalNotes;
+                  }
+
+                  return (
+                    <div
+                      key={rec.id}
+                      className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2.5 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                        <span className="text-[10px] font-bold text-[var(--teal-light)]">
+                          {new Date(rec.createdAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                        <span className="bg-slate-800 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-slate-300 border border-slate-700">
+                          {rec.diagnosis}
+                        </span>
+                      </div>
+
+                      {subjectiveText && (
+                        <div>
+                          <p className="text-[9px] uppercase font-bold text-slate-500">Subjective</p>
+                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{subjectiveText}</p>
+                        </div>
+                      )}
+
+                      {objectiveText && (
+                        <div>
+                          <p className="text-[9px] uppercase font-bold text-slate-500">Objective</p>
+                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{objectiveText}</p>
+                        </div>
+                      )}
+
+                      {planText && (
+                        <div>
+                          <p className="text-[9px] uppercase font-bold text-slate-500">Plan</p>
+                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{planText}</p>
+                        </div>
+                      )}
+
+                      {rec.prescription && (
+                        <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
+                          <p className="text-[9px] uppercase font-bold text-emerald-400">Prescribed</p>
+                          <p className="text-[11px] text-slate-300 font-medium">{rec.prescription}</p>
+                        </div>
+                      )}
+
+                      {rec.attachments && rec.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {rec.attachments.map((att: any) => (
+                            <a
+                              key={att.id}
+                              href={att.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[9px] text-[var(--teal-light)] hover:underline"
+                            >
+                              <Paperclip className="w-2.5 h-2.5" />
+                              {att.description || "Attachment"}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

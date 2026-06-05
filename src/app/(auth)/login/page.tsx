@@ -29,7 +29,16 @@ export default function LoginPage() {
       if (res?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/portal/dashboard");
+        // Fetch the session to determine the user's role and redirect dynamically
+        const sessionRes = await fetch("/api/auth/session");
+        const session = await sessionRes.json();
+        const role = session?.user?.role;
+
+        if (role === "DOCTOR" || role === "RECEPTIONIST") {
+          router.push("/admin");
+        } else {
+          router.push("/portal/dashboard");
+        }
         router.refresh();
       }
     } catch (err) {

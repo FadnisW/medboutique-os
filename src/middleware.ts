@@ -3,67 +3,87 @@ import { auth } from "@/auth";
 /**
  * Middleware for Next.js to handle authentication and role-based access control.
  * It intercepts requests and redirects users based on their authentication status and role.
+ * Incorporates path normalization to prevent path-traversal/bypass attacks.
  */
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const role = req.auth?.user?.role;
 
-  // Define route categories
-  const isPublicRoute = 
-    nextUrl.pathname === "/" || 
-    nextUrl.pathname.startsWith("/treatments/") || 
-    nextUrl.pathname.startsWith("/physicians/") || 
-    nextUrl.pathname === "/quiz" || 
-    nextUrl.pathname === "/book" ||
-    nextUrl.pathname.startsWith("/api/webhooks");
-    
-  const isAuthRoute = nextUrl.pathname === "/login";
-  const isAdminRoute = nextUrl.pathname.startsWith("/admin");
-  const isPortalRoute = nextUrl.pathname.startsWith("/portal");
+  // Normalize path to prevent evasion attacks (e.g. double slashes, trailing slashes, uppercase bypass)
+  const rawPath = nextUrl.pathname;
+  let normalizedPath = rawPath.replace(/\/+/g, "/").toLowerCase();
+  if (normalizedPath !== "/" && normalizedPath.endsWith("/")) {
+    normalizedPath = normalizedPath.slice(0, -1);
+  }
 
-  // Handle authentication routes (e.g., /login)
+  // Whitelisted Public Routes (accessible without logging in)
+  const isPublicRoute =
+    normalizedPath === "" ||
+    normalizedPath === "/" ||
+    normalizedPath.startsWith("/treatments/") ||
+    normalizedPath.startsWith("/physicians/") ||
+    normalizedPath === "/quiz" ||
+    normalizedPath === "/book" ||
+    normalizedPath === "/api/webhooks" ||
+    normalizedPath.startsWith("/api/webhooks/") ||
+    normalizedPath === "/api/auth" ||
+    normalizedPath.startsWith("/api/auth/");
+
+  // Auth Routes
+  const isAuthRoute = normalizedPath === "/login";
+
+  // Restricted Route Categories
+  const isAdminRoute = normalizedPath === "/admin" || normalizedPath.startsWith("/admin/");
+  const isPortalRoute = normalizedPath === "/portal" || normalizedPath.startsWith("/portal/");
+
+  // 1. Allow public routes unconditionally
+  if (isPublicRoute) {
+    return;
+  }
+
+  // 2. Handle login route (auth route)
   if (isAuthRoute) {
     if (isLoggedIn) {
-      // Redirect authenticated users based on their role
+      // Redirect logged-in users to their corresponding dashboard
       if (role === "DOCTOR" || role === "RECEPTIONIST") {
         return Response.redirect(new URL("/admin", nextUrl));
       }
       return Response.redirect(new URL("/portal/dashboard", nextUrl));
     }
-    // Allow unauthenticated users to access auth routes
     return;
   }
 
-  // Handle admin routes (e.g., /admin/*)
+  // 3. Default-Deny Policy: Require login for all other routes
+  if (!isLoggedIn) {
+    // Redirect unauthenticated requests to login page
+    return Response.redirect(new URL("/login", nextUrl));
+  }
+
+  // 4. Enforce role-based access control (RBAC) on admin routes
   if (isAdminRoute) {
-    if (!isLoggedIn) {
-      // Redirect unauthenticated users to login
-      return Response.redirect(new URL("/login", nextUrl));
-    }
     if (role !== "DOCTOR" && role !== "RECEPTIONIST") {
-      // Restrict access for non-admin users
-      return Response.redirect(new URL("/login", nextUrl));
+      // Non-admin roles redirected back to portal dashboard or login
+      return Response.redirect(new URL("/portal/dashboard", nextUrl));
     }
-    // Allow access for doctors and receptionists
+  }
+
+  // 5. Patient Portal routes require PATIENT, DOCTOR, or RECEPTIONIST (any authenticated user is fine)
+  if (isPortalRoute) {
+    // All authenticated users are allowed, so we just proceed
     return;
   }
 
-  // Handle patient portal routes (e.g., /portal/*)
-  if (isPortalRoute) {
-    if (!isLoggedIn) {
-      // Redirect unauthenticated users to login
-      return Response.redirect(new URL("/login", nextUrl));
-    }
-    // Allow authenticated users to access portal routes
-    return;
-  }
+  // Allow other authenticated requests (default fallback)
+  return;
 });
 
 /**
  * Configuration object to specify which routes the middleware should run on.
- * Excludes API routes, static files, images, and SVG files.
+ * Executes on all routes except static assets, favicon, etc.
+ * Unlike previous configurations, it evaluates API endpoints (excluding auth) to prevent unauthorized API calls.
  */
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.svg).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg).*)"],
 };
+
