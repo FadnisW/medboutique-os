@@ -1,15 +1,28 @@
 "use server";
 
+import { auth } from "@/auth";
 import db from "@/lib/db";
 import { AppointmentStatus } from "@prisma/client";
 
 export async function getDashboardData() {
   try {
+    // ── Auth Guard ──────────────────────────────
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    // Only DOCTOR and RECEPTIONIST can view the admin dashboard
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
     const totalPatients = await db.patientProfile.count();
 
-    const today = new Date();
-    const startOfToday = new Date(today.setHours(0, 0, 0, 0));
-    const endOfToday = new Date(today.setHours(23, 59, 59, 999));
+    // FIX: Date mutation bug — setHours mutates `today` in place, so
+    // startOfToday must be cloned before computing endOfToday.
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     // Today's appointments count
     const todaysAppointmentsCount = await db.appointment.count({
@@ -102,11 +115,11 @@ export async function getDashboardData() {
       agenda: formattedAgenda,
       success: true,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getDashboardData:", error);
     return {
       success: false,
-      error: error.message || "Failed to load dashboard data",
+      error: "Failed to load dashboard data",
     };
   }
 }

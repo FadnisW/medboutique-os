@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Calendar, ClipboardList, FolderHeart, CreditCard, LogOut, Settings } from "lucide-react";
+import { logoutAction } from "@/app/actions/auth";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -70,9 +71,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <button className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors">
               <Settings className="w-4 h-4" />
             </button>
-            <button className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors">
-              <LogOut className="w-4 h-4" />
-            </button>
+            <form action={logoutAction}>
+              <button type="submit" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors" title="Sign out">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </form>
           </div>
         </div>
       </aside>

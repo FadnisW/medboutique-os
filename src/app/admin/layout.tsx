@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, CalendarDays, Users, FileText, Receipt, Settings, LogOut, Plus } from "lucide-react";
+import { logoutAction } from "@/app/actions/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -94,9 +95,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </span>
             </div>
           </div>
-          <button className="text-slate-500 hover:text-white transition-colors">
-            <LogOut className="w-4 h-4" />
-          </button>
+          <form action={logoutAction}>
+            <button type="submit" className="text-slate-500 hover:text-white transition-colors" title="Sign out">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </form>
         </div>
       </aside>
 

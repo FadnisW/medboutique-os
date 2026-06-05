@@ -1,10 +1,28 @@
 "use server";
 
+import { auth } from "@/auth";
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
 export async function getPatientsAndRecords(patientId?: string) {
   try {
+    // ── Auth Guard ──────────────────────────────
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    // Only DOCTOR and RECEPTIONIST can access all patient records
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
+    // ── Input validation ────────────────────────
+    if (patientId !== undefined) {
+      if (typeof patientId !== "string" || patientId.length > 100) {
+        return { success: false, error: "Invalid patient ID" };
+      }
+    }
+
     const patients = await db.patientProfile.findMany({
       include: {
         user: true,
@@ -23,6 +41,10 @@ export async function getPatientsAndRecords(patientId?: string) {
         user: true,
       },
     });
+
+    if (!selectedPatient) {
+      return { success: false, error: "Patient not found" };
+    }
 
     const records = await db.patientRecord.findMany({
       where: { patientId: activePatientId },
@@ -67,9 +89,9 @@ export async function getPatientsAndRecords(patientId?: string) {
       })),
       success: true,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getPatientsAndRecords:", error);
-    return { success: false, error: error.message || "Failed to fetch patient records" };
+    return { success: false, error: "Failed to fetch patient records" };
   }
 }
 
@@ -83,10 +105,70 @@ export async function saveSOAPNote(
   attachmentUrls?: { fileUrl: string; fileType: string; description?: string }[]
 ) {
   try {
-    if (!patientId) throw new Error("Patient ID is required");
-    if (!diagnosis) throw new Error("Diagnosis is required");
+    // ── Auth Guard ──────────────────────────────
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    // Only DOCTORs can create clinical notes
+    if (session.user.role !== "DOCTOR") {
+      return { success: false, error: "Forbidden: Only doctors can create clinical notes" };
+    }
 
-    // Format clinical notes as a structured SOAP string or JSON
+    // ── Input validation ────────────────────────
+    if (!patientId || typeof patientId !== "string" || patientId.length > 100) {
+      return { success: false, error: "Invalid patient ID" };
+    }
+    if (!diagnosis || typeof diagnosis !== "string") {
+      return { success: false, error: "Diagnosis is required" };
+    }
+    if (diagnosis.length > 500) {
+      return { success: false, error: "Diagnosis is too long (max 500 characters)" };
+    }
+    if (typeof subjective !== "string" || subjective.length > 5000) {
+      return { success: false, error: "Subjective notes are too long (max 5000 characters)" };
+    }
+    if (typeof objective !== "string" || objective.length > 5000) {
+      return { success: false, error: "Objective notes are too long (max 5000 characters)" };
+    }
+    if (typeof assessmentPlan !== "string" || assessmentPlan.length > 5000) {
+      return { success: false, error: "Assessment plan is too long (max 5000 characters)" };
+    }
+    if (prescription !== undefined && (typeof prescription !== "string" || prescription.length > 5000)) {
+      return { success: false, error: "Prescription is too long (max 5000 characters)" };
+    }
+
+    // Validate attachments
+    if (attachmentUrls && Array.isArray(attachmentUrls)) {
+      if (attachmentUrls.length > 20) {
+        return { success: false, error: "Too many attachments (max 20)" };
+      }
+      for (const att of attachmentUrls) {
+        if (!att.fileUrl || typeof att.fileUrl !== "string" || att.fileUrl.length > 2000) {
+          return { success: false, error: "Invalid attachment URL" };
+        }
+        if (!att.fileType || typeof att.fileType !== "string" || att.fileType.length > 50) {
+          return { success: false, error: "Invalid attachment file type" };
+        }
+        // Basic URL validation - must start with http:// or https://
+        try {
+          const url = new URL(att.fileUrl);
+          if (!["http:", "https:"].includes(url.protocol)) {
+            return { success: false, error: "Attachment URL must use HTTPS" };
+          }
+        } catch {
+          return { success: false, error: "Invalid attachment URL format" };
+        }
+      }
+    }
+
+    // Verify patient exists
+    const patient = await db.patientProfile.findUnique({ where: { id: patientId } });
+    if (!patient) {
+      return { success: false, error: "Patient not found" };
+    }
+
+    // Format clinical notes as a structured SOAP JSON
     const clinicalNotes = JSON.stringify({
       subjective,
       objective,
@@ -113,9 +195,9 @@ export async function saveSOAPNote(
     });
 
     revalidatePath("/admin/patients/notes");
-    return { success: true, record };
-  } catch (error: any) {
+    return { success: true, record: { id: record.id } };
+  } catch (error: unknown) {
     console.error("Error in saveSOAPNote:", error);
-    return { success: false, error: error.message || "Failed to save clinical note" };
+    return { success: false, error: "Failed to save clinical note" };
   }
 }

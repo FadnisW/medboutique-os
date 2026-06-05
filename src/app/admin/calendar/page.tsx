@@ -502,7 +502,7 @@ export default function AdminCalendarPage() {
                 >
                   {data?.patients.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.user.name} ({p.user.email})
+                      {p.userName} ({p.userEmail})
                     </option>
                   ))}
                 </select>
