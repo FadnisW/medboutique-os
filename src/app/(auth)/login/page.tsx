@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Stethoscope, Eye, EyeOff, Loader2 } from "lucide-react";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -126,7 +127,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-[var(--primary)] hover:bg-slate-800 text-white rounded-full py-3 text-sm font-semibold transition-all shadow-lg shadow-[var(--primary)]/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+          className="w-full bg-[var(--primary)] hover:bg-slate-800 text-white rounded-full py-3 text-sm font-semibold transition-all shadow-lg shadow-[var(--primary)]/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2 cursor-pointer"
         >
           {isLoading ? (
             <>
@@ -137,6 +138,13 @@ export default function LoginPage() {
             "Sign In"
           )}
         </button>
+
+        <p className="text-center text-xs text-[var(--on-surface-variant)] mt-4">
+          Don't have an account?{" "}
+          <Link href="/register" className="text-[var(--teal)] hover:text-[var(--teal-dark)] font-semibold transition-colors">
+            Create Account
+          </Link>
+        </p>
       </form>
     </motion.div>
   );
