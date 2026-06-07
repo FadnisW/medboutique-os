@@ -31,7 +31,7 @@ export default auth((req) => {
     normalizedPath.startsWith("/api/auth/");
 
   // Auth Routes
-  const isAuthRoute = normalizedPath === "/login";
+  const isAuthRoute = normalizedPath === "/login" || normalizedPath === "/register";
 
   // Restricted Route Categories
   const isAdminRoute = normalizedPath === "/admin" || normalizedPath.startsWith("/admin/");
