@@ -255,3 +255,137 @@ export async function getAvailableRescheduleSlots() {
     return { success: false, error: "Failed to load slots" };
   }
 }
+
+/**
+ * Server action to get all available future slots for public/patient booking.
+ * Does not require authentication, so anyone can see available slots.
+ */
+export async function getPublicAvailableSlots() {
+  try {
+    const slots = await db.availabilitySlot.findMany({
+      where: {
+        isBooked: false,
+        startTime: {
+          gt: new Date(),
+        },
+      },
+      include: {
+        doctor: {
+          include: {
+            user: true,
+          },
+        },
+      },
+      orderBy: {
+        startTime: "asc",
+      },
+      take: 50,
+    });
+
+    return {
+      success: true,
+      slots: slots.map((s) => ({
+        id: s.id,
+        startTime: s.startTime.toISOString(),
+        endTime: s.endTime.toISOString(),
+        doctorName: s.doctor.user.name,
+        doctorId: s.doctorId,
+        specialty: s.doctor.specialty,
+      })),
+    };
+  } catch (error: unknown) {
+    console.error("Error in getPublicAvailableSlots:", error);
+    return { success: false, error: "Failed to load slots" };
+  }
+}
+
+/**
+ * Server action to book an appointment for the authenticated patient.
+ */
+export async function bookPatientAppointment(slotId: string, reason?: string) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "PATIENT") {
+      return { success: false, error: "Forbidden: Patients only" };
+    }
+
+    if (!slotId || typeof slotId !== "string") {
+      return { success: false, error: "Invalid slot ID" };
+    }
+
+    const patient = await db.patientProfile.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    if (!patient) {
+      return { success: false, error: "Patient profile not found" };
+    }
+
+    const slot = await db.availabilitySlot.findUnique({
+      where: { id: slotId },
+    });
+
+    if (!slot) {
+      return { success: false, error: "Slot not found" };
+    }
+
+    if (slot.isBooked) {
+      return { success: false, error: "Slot is already booked" };
+    }
+
+    const appointment = await db.$transaction(async (tx) => {
+      // Mark slot as booked
+      await tx.availabilitySlot.update({
+        where: { id: slotId },
+        data: { isBooked: true },
+      });
+
+      // Create appointment
+      return await tx.appointment.create({
+        data: {
+          patientId: patient.id,
+          doctorId: slot.doctorId,
+          slotId: slotId,
+          reason: reason || "",
+          status: AppointmentStatus.CONFIRMED,
+        },
+        include: {
+          slot: true,
+          doctor: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
+    });
+
+    revalidatePath("/portal/appointments");
+    revalidatePath("/portal/dashboard");
+    revalidatePath("/admin/calendar");
+
+    return {
+      success: true,
+      appointment: {
+        id: appointment.id,
+        status: appointment.status,
+        reason: appointment.reason || "",
+        slot: {
+          startTime: appointment.slot.startTime.toISOString(),
+          endTime: appointment.slot.endTime.toISOString(),
+        },
+        doctor: {
+          name: appointment.doctor.user.name,
+          specialty: appointment.doctor.specialty,
+        },
+      },
+    };
+  } catch (error: unknown) {
+    console.error("Error in bookPatientAppointment:", error);
+    return { success: false, error: "Failed to book appointment" };
+  }
+}
+

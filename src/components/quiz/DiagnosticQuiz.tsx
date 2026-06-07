@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Lock, Download, Stethoscope, Droplets, Zap, ChevronRight, Activity } from "lucide-react";
 import { submitDiagnosticQuiz } from "@/app/actions/careplans";
+import { format } from "date-fns";
 
 /**
  * DiagnosticQuiz component provides a multi-step interactive quiz to assess the user's skin concerns.
@@ -72,6 +73,390 @@ export function DiagnosticQuiz() {
 
   const handleBack = () => {
     if (currentStep > 1) setCurrentStep(prev => prev - 1);
+  };
+
+  const handleDownloadPDF = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow popups to download your PDF results.");
+      return;
+    }
+
+    const todayStr = format(new Date(), "MMMM d, yyyy");
+    const concernsStr = concerns.join(", ") || "None selected";
+    const skinTypeStr = skinProfile.type || "Not specified";
+    const skinMiddayStr = skinProfile.midday || "Not specified";
+    const prevTreatmentsStr = skinProfile.previous || "Not specified";
+    const allergiesStr = medicalHistory.allergies ? "Yes" : "No";
+    const medicationsStr = medicalHistory.medication ? "Yes" : "No";
+    const pregnantStr = medicalHistory.pregnant ? "Yes" : "No";
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>MedBoutique - Clinical Skin Analysis Report</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+          <style>
+            :root {
+              --primary: #0f172a;
+              --teal: #14b8a6;
+              --teal-dark: #0f766e;
+              --pink: #db2777;
+              --slate-50: #f8fafc;
+              --slate-100: #f1f5f9;
+              --slate-200: #e2e8f0;
+              --slate-600: #475569;
+              --slate-800: #1e293b;
+            }
+            body {
+              font-family: 'Inter', sans-serif;
+              color: var(--primary);
+              margin: 0;
+              padding: 40px;
+              background-color: white;
+              line-height: 1.6;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .no-print {
+                display: none;
+              }
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid var(--slate-100);
+              padding-bottom: 24px;
+              margin-bottom: 32px;
+            }
+            .logo-section h1 {
+              font-family: 'Playfair Display', serif;
+              font-size: 28px;
+              font-weight: 700;
+              margin: 0;
+              color: var(--primary);
+              letter-spacing: -0.02em;
+            }
+            .logo-section p {
+              margin: 4px 0 0 0;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.15em;
+              color: var(--teal-dark);
+              font-weight: 600;
+            }
+            .date-badge {
+              text-align: right;
+              font-size: 13px;
+              color: var(--slate-600);
+            }
+            .grid-2 {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 24px;
+              margin-bottom: 32px;
+            }
+            .card {
+              background-color: var(--slate-50);
+              border: 1px solid var(--slate-200);
+              border-radius: 16px;
+              padding: 24px;
+            }
+            .card h3 {
+              font-family: 'Playfair Display', serif;
+              font-size: 18px;
+              margin: 0 0 16px 0;
+              color: var(--primary);
+            }
+            .score-container {
+              display: flex;
+              align-items: center;
+              gap: 24px;
+            }
+            .score-circle {
+              width: 100px;
+              height: 100px;
+              border-radius: 50%;
+              border: 8px solid var(--teal);
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              font-weight: 700;
+              background-color: white;
+            }
+            .score-val {
+              font-size: 32px;
+              color: var(--primary);
+              line-height: 1;
+            }
+            .score-lbl {
+              font-size: 10px;
+              color: var(--slate-600);
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              margin-top: 2px;
+            }
+            .score-desc {
+              font-size: 14px;
+              color: var(--slate-800);
+              font-weight: 500;
+              margin: 0;
+            }
+            .info-list {
+              margin: 0;
+              padding: 0;
+              list-style: none;
+              font-size: 14px;
+            }
+            .info-list li {
+              display: flex;
+              justify-content: space-between;
+              padding: 8px 0;
+              border-bottom: 1px solid var(--slate-100);
+            }
+            .info-list li:last-child {
+              border-bottom: none;
+              padding-bottom: 0;
+            }
+            .info-list li:first-child {
+              padding-top: 0;
+            }
+            .info-label {
+              font-weight: 600;
+              color: var(--slate-600);
+            }
+            .info-val {
+              color: var(--primary);
+              font-weight: 500;
+              text-align: right;
+            }
+            .recommendation-section {
+              margin-bottom: 32px;
+            }
+            .rec-title {
+              font-family: 'Playfair Display', serif;
+              font-size: 22px;
+              margin: 0 0 12px 0;
+              color: var(--primary);
+            }
+            .rec-text {
+              font-size: 15px;
+              color: var(--slate-800);
+              line-height: 1.7;
+              margin: 0 0 24px 0;
+            }
+            .treatments-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 32px;
+            }
+            .treatment-card {
+              border: 1px solid var(--slate-200);
+              border-radius: 12px;
+              padding: 16px;
+            }
+            .treatment-card h4 {
+              margin: 0 0 8px 0;
+              font-size: 15px;
+              font-weight: 600;
+              color: var(--primary);
+            }
+            .treatment-card p {
+              margin: 0;
+              font-size: 12px;
+              color: var(--slate-600);
+              line-height: 1.5;
+            }
+            .dr-note {
+              border-left: 4px solid var(--pink);
+              background-color: var(--slate-50);
+              padding: 20px;
+              border-radius: 0 12px 12px 0;
+              margin-bottom: 40px;
+            }
+            .dr-note h4 {
+              margin: 0 0 8px 0;
+              font-family: 'Playfair Display', serif;
+              font-size: 16px;
+              color: var(--pink);
+            }
+            .dr-note p {
+              margin: 0;
+              font-size: 14px;
+              color: var(--slate-800);
+            }
+            .footer {
+              text-align: center;
+              font-size: 11px;
+              color: var(--slate-600);
+              border-top: 1px solid var(--slate-100);
+              padding-top: 24px;
+              margin-top: 40px;
+            }
+            .btn-print {
+              display: inline-block;
+              background-color: var(--primary);
+              color: white;
+              padding: 12px 24px;
+              border-radius: 30px;
+              font-size: 14px;
+              font-weight: 600;
+              text-decoration: none;
+              cursor: pointer;
+              border: none;
+              box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+              margin-bottom: 24px;
+            }
+            .btn-print:hover {
+              background-color: var(--slate-800);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print" style="text-align: right;">
+            <button class="btn-print" onclick="window.print()">Print / Save PDF</button>
+          </div>
+          
+          <div class="header">
+            <div class="logo-section">
+              <h1>MedBoutique</h1>
+              <p>Aesthetic Medicine & Wellness</p>
+            </div>
+            <div class="date-badge">
+              <strong>Patient Quiz Report</strong><br>
+              Date: ${todayStr}
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>Wellness Profile</h3>
+              <ul class="info-list">
+                <li>
+                  <span class="info-label">Name</span>
+                  <span class="info-val">${contact.name || "Anonymous Patient"}</span>
+                </li>
+                <li>
+                  <span class="info-label">Email</span>
+                  <span class="info-val">${contact.email || "N/A"}</span>
+                </li>
+                <li>
+                  <span class="info-label">Phone</span>
+                  <span class="info-val">${contact.phone || "N/A"}</span>
+                </li>
+                <li>
+                  <span class="info-label">Primary Goal</span>
+                  <span class="info-val">${concernsStr}</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h3>Skin Assessment</h3>
+              <div class="score-container">
+                <div class="score-circle">
+                  <span class="score-val">${serverScore}</span>
+                  <span class="score-lbl">Score</span>
+                </div>
+                <div>
+                  <p class="score-desc">Overall Skin Health Index</p>
+                  <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--slate-600);">
+                    Based on hydration, sebum activity, and historical indicators.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top: -16px;">
+            <div class="card">
+              <h3>Skin Characteristics</h3>
+              <ul class="info-list">
+                <li>
+                  <span class="info-label">Skin Type</span>
+                  <span class="info-val">${skinTypeStr}</span>
+                </li>
+                <li>
+                  <span class="info-label">Midday Feel</span>
+                  <span class="info-val">${skinMiddayStr}</span>
+                </li>
+                <li>
+                  <span class="info-label">Previous Treatments</span>
+                  <span class="info-val">${prevTreatmentsStr}</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h3>Medical Indicators</h3>
+              <ul class="info-list">
+                <li>
+                  <span class="info-label">Allergies Declared</span>
+                  <span class="info-val">${allergiesStr}</span>
+                </li>
+                <li>
+                  <span class="info-label">Medications</span>
+                  <span class="info-val">${medicationsStr}</span>
+                </li>
+                <li>
+                  <span class="info-label">Pregnant/Nursing</span>
+                  <span class="info-val">${pregnantStr}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="recommendation-section">
+            <h3 class="rec-title">Clinical Recommendation</h3>
+            <p class="rec-text">${serverRecommendation || "Assessment complete. A detailed care plan has been generated for your review."}</p>
+          </div>
+
+          <h3 class="rec-title" style="font-size: 18px; margin-bottom: 16px;">Suggested Treatments</h3>
+          <div class="treatments-grid">
+            <div class="treatment-card">
+              <h4>HydraFacial</h4>
+              <p>Deep cleansing and active hydration for skin surface refinement and midday shine regulation.</p>
+            </div>
+            <div class="treatment-card">
+              <h4>Chemical Peel</h4>
+              <p>Targeted medical-grade exfoliation to address pigmentation risks and promote healthy cell turnover.</p>
+            </div>
+            <div class="treatment-card">
+              <h4>Microneedling RF</h4>
+              <p>Advanced collagen induction therapy to refine overall skin texture, fine lines, and firm structure.</p>
+            </div>
+          </div>
+
+          <div class="dr-note">
+            <h4>Dr. Aisha Rao's Analysis Note</h4>
+            <p>Based on your profile, I recommend starting with a complimentary consultation at MedBoutique to design your personalized medical-grade care plan. This will allow us to assess your skin under our diagnostic filters before initiating intensive therapies.</p>
+          </div>
+
+          <div class="footer">
+            MedBoutique Clinic &bull; 101 Marine Drive, Mumbai, MH 400002 &bull; Support: care@medboutique.com &bull; Tel: +91 22 5555 0199
+          </div>
+          
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const renderSharedHeader = (title: string, subtitle: string) => (
@@ -453,7 +838,10 @@ export function DiagnosticQuiz() {
               <Link href="/book" className="block w-full text-center bg-gradient-to-r from-slate-800 to-[var(--primary)] text-white py-4 rounded-xl font-medium text-lg shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] transition-all">
                 Book Your Free Consultation &rarr;
               </Link>
-              <button className="block w-full text-center text-[var(--on-surface-variant)] font-medium py-2 hover:text-[var(--primary)] transition-colors inline-flex items-center justify-center gap-2">
+              <button 
+                onClick={handleDownloadPDF}
+                className="block w-full text-center text-[var(--on-surface-variant)] font-medium py-2 hover:text-[var(--primary)] transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
+              >
                 <Download className="w-4 h-4" /> Download my results PDF
               </button>
             </div>
