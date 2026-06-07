@@ -187,3 +187,66 @@ export async function issueInvoice(patientId: string, amountDue: number, status:
     return { success: false, error: "Failed to issue invoice" };
   }
 }
+
+/**
+ * Returns all invoices and summary statistics for the logged-in patient.
+ */
+export async function getPatientInvoices() {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "PATIENT") {
+      return { success: false, error: "Forbidden: Patients only" };
+    }
+
+    const patient = await db.patientProfile.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    if (!patient) {
+      return { success: false, error: "Patient profile not found" };
+    }
+
+    const invoices = await db.invoice.findMany({
+      where: { patientId: patient.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let totalSpent = 0;
+    let outstandingBalance = 0;
+    let nextDueDate: Date | null = null;
+
+    invoices.forEach((inv) => {
+      totalSpent += Number(inv.amountPaid);
+      const remaining = Number(inv.amountDue) - Number(inv.amountPaid);
+      if (remaining > 0) {
+        outstandingBalance += remaining;
+        if (!nextDueDate || inv.createdAt < nextDueDate) {
+          nextDueDate = inv.createdAt;
+        }
+      }
+    });
+
+    return {
+      success: true,
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        amountDue: Number(inv.amountDue),
+        amountPaid: Number(inv.amountPaid),
+        status: inv.status,
+        createdAt: inv.createdAt.toISOString(),
+      })),
+      stats: {
+        totalSpent,
+        outstandingBalance,
+        nextDueDate: nextDueDate ? (nextDueDate as Date).toISOString() : null,
+      },
+    };
+  } catch (error: unknown) {
+    console.error("Error in getPatientInvoices:", error);
+    return { success: false, error: "Failed to load invoices" };
+  }
+}
+

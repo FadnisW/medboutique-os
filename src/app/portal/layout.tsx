@@ -2,16 +2,36 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Calendar, ClipboardList, FolderHeart, CreditCard, LogOut, Settings } from "lucide-react";
-import { logoutAction } from "@/app/actions/auth";
+import { useState, useEffect } from "react";
+import { LayoutDashboard, Calendar, ClipboardList, FolderHeart, CreditCard, LogOut, Settings, MessageSquare } from "lucide-react";
+import { logoutAction, getSessionUser } from "@/app/actions/auth";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [user, setUser] = useState<{ name?: string | null; role?: string | null; email?: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getSessionUser().then((u) => {
+      setUser(u);
+      setLoading(false);
+    });
+  }, []);
+
+  const getInitials = (name?: string | null) => {
+    if (!name) return "EV";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const navLinks = [
     { name: "My Dashboard", href: "/portal/dashboard", icon: LayoutDashboard },
     { name: "My Appointments", href: "/portal/appointments", icon: Calendar },
     { name: "My Care Plan", href: "/portal/care-plan", icon: ClipboardList },
+    { name: "My Care Team Chat", href: "/portal/messages", icon: MessageSquare },
     { name: "My Records", href: "/portal/records", icon: FolderHeart },
     { name: "Payments & Invoices", href: "/portal/invoices", icon: CreditCard },
   ];
@@ -55,24 +75,36 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Profile Area */}
         <div className="mt-auto px-6 pt-6 border-t border-[var(--outline-variant)]/20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[var(--pink-light)] flex items-center justify-center text-[var(--pink)] font-display font-bold text-lg shrink-0">
-              EV
-            </div>
-            <div className="flex flex-col">
-              <span className="font-sans text-sm font-medium text-[var(--primary)]">
-                Eleanor Vance
-              </span>
-              <span className="font-sans text-[10px] uppercase font-bold text-[var(--on-surface-variant)] tracking-wider">
-                Patient
-              </span>
-            </div>
+            {loading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[var(--pink-light)] animate-pulse shrink-0" />
+                <div className="flex flex-col gap-1.5">
+                  <div className="w-20 h-3 bg-slate-200 rounded animate-pulse" />
+                  <div className="w-12 h-2 bg-slate-150 rounded animate-pulse" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-full bg-[var(--pink-light)] flex items-center justify-center text-[var(--pink)] font-display font-bold text-lg shrink-0">
+                  {getInitials(user?.name)}
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-sans text-sm font-medium text-[var(--primary)] truncate max-w-[110px]">
+                    {user?.name || "Eleanor Vance"}
+                  </span>
+                  <span className="font-sans text-[10px] uppercase font-bold text-[var(--on-surface-variant)] tracking-wider">
+                    {user?.role || "Patient"}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex flex-col gap-2">
-            <button className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors">
+            <button className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors cursor-pointer">
               <Settings className="w-4 h-4" />
             </button>
             <form action={logoutAction}>
-              <button type="submit" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors" title="Sign out">
+              <button type="submit" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors cursor-pointer" title="Sign out">
                 <LogOut className="w-4 h-4" />
               </button>
             </form>

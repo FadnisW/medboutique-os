@@ -1,1 +1,5 @@
-﻿export default function Page() { return (<div className="p-8"><h1 className="text-3xl font-display font-bold text-[var(--primary)]">PORTAL / BILLING</h1><p className="mt-4 text-[var(--on-surface-variant)]">This page is currently under construction.</p></div>); }
+import { redirect } from "next/navigation";
+
+export default function PortalBillingPage() {
+  redirect("/portal/invoices");
+}

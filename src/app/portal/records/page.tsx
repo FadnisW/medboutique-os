@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Download, Eye, Pill, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, Eye, Pill, ExternalLink, AlertCircle, FileText, Calendar, User, Paperclip } from "lucide-react";
 import { motion } from "framer-motion";
+import { getPatientRecords } from "@/app/actions/records";
 
 type Tab = "visits" | "prescriptions" | "gallery";
 
@@ -55,17 +56,10 @@ function BeforeAfterSlider({ label }: { label: string }) {
 
 export default function RecordsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("visits");
-
-  const visits = [
-    { id: 1, date: "14 JUL 2025", treatment: "HydraFacial Session 1", doctor: "Dr. Aisha Sharma", summary: "Patient presented with moderate dehydration and mild PIH. Treatment completed without adverse reaction. Post-care routine assigned.", status: "Completed" },
-    { id: 2, date: "02 AUG 2025", treatment: "Chemical Peel (AHA/BHA)", doctor: "Dr. Rahul Verma", summary: "Performed 30% glycolic peel. Slight erythema expected for 48h. Patient educated on sun avoidance.", status: "Completed" },
-    { id: 3, date: "12 OCT 2026", treatment: "Laser Resurfacing Session 2", doctor: "Dr. Aisha Sharma", summary: "Upcoming session — notes pending.", status: "Upcoming" },
-  ];
-
-  const prescriptions = [
-    { id: 1, name: "Tretinoin 0.025% Cream", instructions: "Apply pea-sized amount at night. Avoid eye area.", date: "02 Aug 2025", expiry: "02 Nov 2026" },
-    { id: 2, name: "Clindamycin 1% Gel", instructions: "Apply to affected areas twice daily after cleansing.", date: "02 Aug 2025", expiry: "01 Feb 2026" },
-  ];
+  const [records, setRecords] = useState<any[]>([]);
+  const [visits, setVisits] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const galleryItems = [
     { label: "HydraFacial — Session 1" },
@@ -73,13 +67,64 @@ export default function RecordsPage() {
   ];
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "visits", label: "Visit History" },
+    { id: "visits", label: "Clinical Records" },
     { id: "prescriptions", label: "Prescriptions" },
     { id: "gallery", label: "Before & After Gallery" },
   ];
 
+  useEffect(() => {
+    getPatientRecords()
+      .then((res) => {
+        if (res.success) {
+          setRecords(res.records || []);
+          setVisits(res.visits || []);
+        } else {
+          setError(res.error || "Failed to load clinical records");
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError("An error occurred while loading medical records");
+        setLoading(false);
+      });
+  }, []);
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 text-[var(--teal)] animate-spin" />
+          <p className="text-slate-500 text-sm font-semibold">Retrieving medical records...</p>
+        </div>
+      </div>
+    );
+  }
+
+  function Loader2({ className }: { className?: string }) {
+    return (
+      <div className={`border-4 border-slate-200 border-t-[var(--teal)] rounded-full animate-spin ${className}`} style={{ borderTopColor: "var(--teal)" }}></div>
+    );
+  }
+
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto">
+    <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex gap-3 text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+
       <div className="mb-8">
         <p className="text-xs font-bold text-[var(--outline)] uppercase tracking-widest mb-2">Portal / My Records</p>
         <h1 className="font-display text-4xl font-semibold text-[var(--primary)]">My Medical Records</h1>
@@ -91,7 +136,7 @@ export default function RecordsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 -mb-px ${
+            className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 -mb-px cursor-pointer ${
               activeTab === tab.id
                 ? "border-[var(--teal)] text-[var(--teal-dark)]"
                 : "border-transparent text-[var(--on-surface-variant)] hover:text-[var(--primary)]"
@@ -104,62 +149,121 @@ export default function RecordsPage() {
 
       {/* Visit History Tab */}
       {activeTab === "visits" && (
-        <div className="relative border-l-2 border-[var(--surface-dim)] ml-4 pl-8 space-y-8">
-          {visits.map(visit => (
-            <div key={visit.id} className="relative">
-              <div className={`absolute -left-[41px] top-5 w-4 h-4 rounded-full border-4 border-white ${
-                visit.status === "Upcoming" ? "bg-[var(--teal)]" : "bg-[var(--surface-dim)]"
-              }`} />
-              <div className="bg-white rounded-2xl border border-[var(--surface-dim)] p-6 elevated-shadow hover:border-[var(--teal)]/30 transition-all">
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--outline)] mb-2">{visit.date}</p>
-                    <h3 className="font-display text-xl font-semibold text-[var(--primary)]">{visit.treatment}</h3>
-                    <p className="text-sm text-[var(--on-surface-variant)] mt-1">{visit.doctor}</p>
-                  </div>
-                  <span className={`inline-flex text-[10px] font-bold uppercase px-3 py-1.5 rounded-full tracking-widest ${
-                    visit.status === "Upcoming"
-                      ? "bg-[var(--teal)]/10 text-[var(--teal-dark)]"
-                      : "bg-[var(--surface-container)] text-[var(--outline)]"
-                  }`}>
-                    {visit.status}
-                  </span>
-                </div>
-                <p className="text-sm text-[var(--on-surface-variant)] leading-relaxed mb-4">{visit.summary}</p>
-                {visit.status === "Completed" && (
-                  <button className="text-sm font-semibold text-[var(--teal)] hover:text-[var(--teal-dark)] transition-colors flex items-center gap-1.5">
-                    <ExternalLink className="w-4 h-4" /> View Full Notes
-                  </button>
-                )}
-              </div>
+        <div className="space-y-8">
+          {records.length === 0 ? (
+            <div className="bg-[var(--surface-low)] border border-[var(--outline-variant)]/30 rounded-3xl p-12 text-center max-w-md mx-auto">
+              <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="font-semibold text-lg text-[var(--primary)]">No medical records</h3>
+              <p className="text-[var(--on-surface-variant)] text-sm mt-1">Clinical notes and diagnoses will appear here after your consultation visits.</p>
             </div>
-          ))}
+          ) : (
+            <div className="relative border-l-2 border-[var(--surface-dim)] ml-4 pl-8 space-y-8">
+              {records.map(rec => {
+                let parsedSOAP = { subjective: "", objective: "", assessmentPlan: "" };
+                try {
+                  parsedSOAP = JSON.parse(rec.clinicalNotes);
+                } catch(e) {
+                  parsedSOAP.subjective = rec.clinicalNotes;
+                }
+
+                return (
+                  <div key={rec.id} className="relative">
+                    <div className="absolute -left-[41px] top-5 w-4 h-4 rounded-full border-4 border-white bg-[var(--teal)]" />
+                    <div className="bg-white rounded-2xl border border-[var(--surface-dim)] p-6 elevated-shadow hover:border-[var(--teal)]/30 transition-all space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--outline)] mb-1">{formatDate(rec.createdAt)}</p>
+                          <h3 className="font-display text-xl font-semibold text-[var(--primary)]">Diagnosis: {rec.diagnosis}</h3>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-[var(--on-surface-variant)]">
+                        {parsedSOAP.subjective && (
+                          <div>
+                            <span className="text-[9px] uppercase tracking-widest font-bold text-slate-400 block mb-1">Symptoms reported</span>
+                            <p>{parsedSOAP.subjective}</p>
+                          </div>
+                        )}
+                        {parsedSOAP.objective && (
+                          <div>
+                            <span className="text-[9px] uppercase tracking-widest font-bold text-slate-400 block mb-1">Clinical findings</span>
+                            <p>{parsedSOAP.objective}</p>
+                          </div>
+                        )}
+                        {parsedSOAP.assessmentPlan && (
+                          <div>
+                            <span className="text-[9px] uppercase tracking-widest font-bold text-slate-400 block mb-1">Treatment plan</span>
+                            <p>{parsedSOAP.assessmentPlan}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {rec.prescription && (
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex items-center gap-3">
+                          <Pill className="w-5 h-5 text-[var(--teal)] shrink-0" />
+                          <div>
+                            <span className="text-[9px] uppercase tracking-widest text-[var(--outline)] font-bold block">Prescribed Medication</span>
+                            <p className="text-xs font-semibold text-[var(--primary)]">{rec.prescription}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {rec.attachments && rec.attachments.length > 0 && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold block mb-2">Attachments</span>
+                          <div className="flex flex-wrap gap-3">
+                            {rec.attachments.map((att: any) => (
+                              <a
+                                key={att.id}
+                                href={att.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="bg-[var(--surface-lowest)] border border-[var(--surface-dim)] rounded-xl px-3 py-1.5 text-xs text-[var(--teal)] hover:bg-[var(--surface-low)] transition-colors inline-flex items-center gap-1.5"
+                              >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span>{att.description || "View attachment"}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* Prescriptions Tab */}
       {activeTab === "prescriptions" && (
         <div className="space-y-4">
-          {prescriptions.map(rx => (
-            <div key={rx.id} className="bg-white rounded-2xl border border-[var(--surface-dim)] p-6 elevated-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-[var(--teal)]/30 transition-all">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[var(--teal)]/10 flex items-center justify-center shrink-0">
-                  <Pill className="w-6 h-6 text-[var(--teal)]" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg text-[var(--primary)] mb-1">{rx.name}</h3>
-                  <p className="text-sm text-[var(--on-surface-variant)] mb-2">{rx.instructions}</p>
-                  <div className="flex gap-3 text-[10px] font-bold uppercase tracking-wider text-[var(--outline)]">
-                    <span>Prescribed: {rx.date}</span>
-                    <span className="text-[var(--teal-dark)]">Valid until: {rx.expiry}</span>
+          {records.filter(r => r.prescription).length === 0 ? (
+            <div className="bg-[var(--surface-low)] border border-[var(--outline-variant)]/30 rounded-3xl p-12 text-center max-w-md mx-auto">
+              <Pill className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="font-semibold text-lg text-[var(--primary)]">No active prescriptions</h3>
+              <p className="text-[var(--on-surface-variant)] text-sm mt-1">Medications prescribed by your doctor will show up here.</p>
+            </div>
+          ) : (
+            records.filter(r => r.prescription).map(rx => (
+              <div key={rx.id} className="bg-white rounded-2xl border border-[var(--surface-dim)] p-6 elevated-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-[var(--teal)]/30 transition-all">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-[var(--teal)]/10 flex items-center justify-center shrink-0">
+                    <Pill className="w-6 h-6 text-[var(--teal)]" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg text-[var(--primary)] mb-1">{rx.prescription.split(",")[0]}</h3>
+                    <p className="text-sm text-[var(--on-surface-variant)] mb-2">{rx.prescription}</p>
+                    <div className="flex gap-3 text-[10px] font-bold uppercase tracking-wider text-[var(--outline)]">
+                      <span>Prescribed: {formatDate(rx.createdAt)}</span>
+                      <span className="text-[var(--teal-dark)]">Origin: Diagnosis of {rx.diagnosis}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-full border-2 border-[var(--teal)] text-[var(--teal-dark)] text-sm font-semibold hover:bg-[var(--teal)]/5 transition-colors shrink-0">
-                <Download className="w-4 h-4" /> Download PDF
-              </button>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
@@ -189,7 +293,6 @@ export default function RecordsPage() {
               <Eye className="w-12 h-12 text-[var(--outline-variant)] mx-auto mb-4" />
               <h3 className="font-display text-2xl font-semibold text-[var(--primary)] mb-2">Your progress photos will appear here</h3>
               <p className="text-[var(--on-surface-variant)] mb-6">After your first treatment, your doctor will upload your progress photos.</p>
-              <a href="/book" className="bg-[var(--primary)] text-white px-6 py-3 rounded-full font-medium inline-block hover:bg-slate-800 transition-colors">Book Your First Session</a>
             </div>
           )}
         </div>

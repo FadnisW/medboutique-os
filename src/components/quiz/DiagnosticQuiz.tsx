@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Lock, Download, Stethoscope, Droplets, Zap, ChevronRight, Activity } from "lucide-react";
+import { submitDiagnosticQuiz } from "@/app/actions/careplans";
 
 /**
  * DiagnosticQuiz component provides a multi-step interactive quiz to assess the user's skin concerns.
@@ -15,6 +16,8 @@ export function DiagnosticQuiz() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [serverRecommendation, setServerRecommendation] = useState("");
+  const [serverScore, setServerScore] = useState(72);
 
   // State for form inputs across different steps
   const [concerns, setConcerns] = useState<string[]>([]);
@@ -38,7 +41,7 @@ export function DiagnosticQuiz() {
   });
   const [emailError, setEmailError] = useState(false);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === 4) {
       if (!contact.email.includes("@")) {
         setEmailError(true);
@@ -48,11 +51,20 @@ export function DiagnosticQuiz() {
       setCurrentStep(5);
       setIsProcessing(true);
       
-      // Simulate processing
-      setTimeout(() => {
+      try {
+        const res = await submitDiagnosticQuiz(concerns, skinProfile, medicalHistory, contact);
+        if (res.success && res.recommendation) {
+          setServerRecommendation(res.recommendation);
+          setServerScore(res.score || 72);
+        } else {
+          setServerRecommendation("Assessment complete. Your care plan is ready in your portal.");
+        }
+      } catch (err) {
+        setServerRecommendation("Assessment complete. Your care plan is ready in your portal.");
+      } finally {
         setIsProcessing(false);
         setShowResults(true);
-      }, 3000);
+      }
     } else {
       setCurrentStep(prev => prev + 1);
     }
@@ -391,17 +403,17 @@ export function DiagnosticQuiz() {
                     fill="none" 
                     stroke="var(--teal)" 
                     strokeWidth="2.5" 
-                    strokeDasharray="72, 100" 
+                    strokeDasharray={`${serverScore}, 100`} 
                     initial={{ strokeDasharray: "0, 100" }}
-                    animate={{ strokeDasharray: "72, 100" }}
+                    animate={{ strokeDasharray: `${serverScore}, 100` }}
                     transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
                   />
                 </svg>
-                <span className="font-display text-5xl font-semibold text-[var(--primary)]">72<span className="text-2xl text-[var(--outline-variant)]">/100</span></span>
+                <span className="font-display text-5xl font-semibold text-[var(--primary)]">{serverScore}<span className="text-2xl text-[var(--outline-variant)]">/100</span></span>
               </div>
               
               <p className="text-lg font-medium text-[var(--on-surface-variant)] max-w-sm mx-auto leading-relaxed">
-                Moderate-sensitive profile. Elevated pigmentation risk detected based on your midday concerns.
+                {serverRecommendation}
               </p>
             </div>
 

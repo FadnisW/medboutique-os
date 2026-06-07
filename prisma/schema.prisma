@@ -38,6 +38,7 @@ model User {
   doctorProfile  DoctorProfile?
   staffProfile   StaffProfile?
   auditLogs      AuditLog[]
+  messages       Message[]
 }
 
 model PatientProfile {
@@ -55,6 +56,7 @@ model PatientProfile {
   invoices       Invoice[]
   diagnostics    DiagnosticSubmission[]
   carePlans      CarePlan[]
+  conversations  Conversation[]
 
   @@map("patient_profiles")
 }
@@ -70,6 +72,7 @@ model DoctorProfile {
   user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   slots                   AvailabilitySlot[]
   appointments            Appointment[]
+  conversations           Conversation[]
 
   @@map("doctor_profiles")
 }
@@ -242,3 +245,56 @@ model CarePlanTask {
 
   @@map("care_plan_tasks")
 }
+
+model Conversation {
+  id        String   @id @default(cuid())
+  patientId String   @map("patient_id")
+  doctorId  String   @map("doctor_id")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient  PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor   DoctorProfile  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([patientId, doctorId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  content        String   @db.Text
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model ClinicSettings {
+  id               String   @id @default("default")
+  clinicName       String   @default("MedBoutique Clinic") @map("clinic_name")
+  doctorName       String   @default("Dr. Aisha Sharma") @map("doctor_name")
+  specialty        String   @default("Dermatology & Aesthetics")
+  phone            String   @default("+91 98765 43210")
+  address          String   @db.Text @default("Suite 402, Pacific Mall, Linking Road, Bandra West, Mumbai 400050")
+  duration         Int      @default(60)
+  buffer           Int      @default(15)
+  bookingLimit     Int      @default(4) @map("booking_limit")
+  openDays         String   @default("0,1,2,3,4,5") @map("open_days")
+  whatsappConfirm  Boolean  @default(true) @map("whatsapp_confirm")
+  whatsapp24h      Boolean  @default(true) @map("whatsapp_24h")
+  sms1h            Boolean  @default(false) @map("sms_1h")
+  emailInvoice     Boolean  @default(true) @map("email_invoice")
+  newBookingAlert  Boolean  @default(true) @map("new_booking_alert")
+  whatsappTemplate String   @db.Text @default("Hi {{patient_name}},\n\nYour appointment for {{treatment}} with {{doctor}} is confirmed for {{date}} at {{time}}.\n\nLocation: {{clinic_address}}\n\nSee you soon! — MedBoutique") @map("whatsapp_template")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("clinic_settings")
+}
+
+

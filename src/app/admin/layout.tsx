@@ -2,17 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarDays, Users, FileText, Receipt, Settings, LogOut, Plus } from "lucide-react";
-import { logoutAction } from "@/app/actions/auth";
+import { useState, useEffect } from "react";
+import { LayoutDashboard, CalendarDays, Users, FileText, Receipt, Settings, LogOut, Plus, MessageSquare } from "lucide-react";
+import { logoutAction, getSessionUser } from "@/app/actions/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [user, setUser] = useState<{ name?: string | null; role?: string | null; email?: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getSessionUser().then((u) => {
+      setUser(u);
+      setLoading(false);
+    });
+  }, []);
+
+  const getInitials = (name?: string | null) => {
+    if (!name) return "DR";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const navLinks = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Schedule", href: "/admin/calendar", icon: CalendarDays },
     { name: "Patients", href: "/admin/patients", icon: Users },
     { name: "Clinical Notes", href: "/admin/patients/notes", icon: FileText },
+    { name: "Messages", href: "/admin/messages", icon: MessageSquare },
     { name: "Billing", href: "/admin/billing", icon: Receipt },
   ];
 
@@ -81,22 +101,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Profile Area */}
-        <div className="px-6 pt-6 mt-2 flex items-center justify-between">
+        <div className="px-6 pt-6 mt-2 flex items-center justify-between border-t border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-white font-display font-bold text-sm shrink-0">
-              DR
-            </div>
-            <div className="flex flex-col">
-              <span className="font-sans text-sm font-medium text-white">
-                Dr. Aisha
-              </span>
-              <span className="font-sans text-[10px] uppercase font-bold text-[var(--teal-light)] tracking-wider">
-                Doctor
-              </span>
-            </div>
+            {loading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-slate-700 animate-pulse shrink-0" />
+                <div className="flex flex-col gap-1.5">
+                  <div className="w-20 h-3 bg-slate-700 rounded animate-pulse" />
+                  <div className="w-12 h-2 bg-slate-800 rounded animate-pulse" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-white font-display font-bold text-sm shrink-0">
+                  {getInitials(user?.name)}
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-sans text-sm font-medium text-white truncate max-w-[120px]">
+                    {user?.name || "Dr. Aisha"}
+                  </span>
+                  <span className="font-sans text-[10px] uppercase font-bold text-[var(--teal-light)] tracking-wider">
+                    {user?.role || "Doctor"}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           <form action={logoutAction}>
-            <button type="submit" className="text-slate-500 hover:text-white transition-colors" title="Sign out">
+            <button type="submit" className="text-slate-500 hover:text-white transition-colors cursor-pointer" title="Sign out">
               <LogOut className="w-4 h-4" />
             </button>
           </form>
