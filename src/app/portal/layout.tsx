@@ -100,9 +100,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <button className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+            <Link href="/portal/settings" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors cursor-pointer">
               <Settings className="w-4 h-4" />
-            </button>
+            </Link>
             <form action={logoutAction}>
               <button type="submit" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors cursor-pointer" title="Sign out">
                 <LogOut className="w-4 h-4" />

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FileSignature, Camera, Mic, Image as ImageIcon, Save, Paperclip, AlertCircle, Plus, Sparkles, BookOpen } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { FileSignature, Camera, Mic, Image as ImageIcon, Save, Paperclip, AlertCircle, Plus, Sparkles, BookOpen, Check } from "lucide-react";
 import { getPatientsAndRecords, saveSOAPNote } from "@/app/actions/notes";
 
 export default function ClinicalNotesView() {
@@ -23,6 +23,112 @@ export default function ClinicalNotesView() {
   const [attachments, setAttachments] = useState<{ fileUrl: string; fileType: string; description: string }[]>([]);
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
   const [newAttachmentDesc, setNewAttachmentDesc] = useState("");
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const [toast, setToast] = useState<{msg: string, type: "success"|"error"} | null>(null);
+
+  const showToast = (msg: string, type: "success" | "error" = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleMicClick = () => {
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      showToast("Speech recognition is not supported in this browser. Please use Chrome or Edge.", "error");
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setSubjective(prev => prev + (prev ? " " : "") + transcript);
+    };
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error === 'not-allowed') {
+        showToast("Microphone access denied. Please allow microphone permissions in your browser settings.", "error");
+      } else {
+        showToast("Microphone error: " + event.error, "error");
+      }
+      setIsRecording(false);
+    };
+    recognition.onend = () => setIsRecording(false);
+
+    recognition.start();
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("File is too large. Maximum size is 5MB.", "error");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const resultUrl = event.target?.result as string;
+      
+      if (file.type.startsWith("image/")) {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+            setAttachments(prev => [
+              ...prev,
+              {
+                fileUrl: dataUrl,
+                fileType: "image",
+                description: file.name,
+              },
+            ]);
+          }
+        };
+        img.src = resultUrl;
+      } else {
+        setAttachments(prev => [
+          ...prev,
+          {
+            fileUrl: resultUrl,
+            fileType: "pdf",
+            description: file.name,
+          },
+        ]);
+      }
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const loadData = async (patientId?: string) => {
     setLoading(true);
@@ -66,11 +172,11 @@ export default function ClinicalNotesView() {
 
   const handleSave = async () => {
     if (!selectedPatientId) {
-      alert("Please select a patient first.");
+      showToast("Please select a patient first.", "error");
       return;
     }
     if (!diagnosis) {
-      alert("Please enter a diagnosis.");
+      showToast("Please enter a diagnosis.", "error");
       return;
     }
 
@@ -85,7 +191,7 @@ export default function ClinicalNotesView() {
     );
 
     if (res.success) {
-      alert("Clinical note saved successfully.");
+      showToast("Clinical note saved successfully.", "success");
       // Reset editor
       setSubjective("");
       setObjective("");
@@ -96,7 +202,7 @@ export default function ClinicalNotesView() {
       // Reload records
       loadData(selectedPatientId);
     } else {
-      alert(res.error || "Failed to save clinical note.");
+      showToast(res.error || "Failed to save clinical note.", "error");
     }
   };
 
@@ -112,7 +218,19 @@ export default function ClinicalNotesView() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] md:h-screen bg-[var(--background)]">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] md:h-screen bg-[var(--background)] relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce border ${
+          toast.type === "error" 
+            ? "bg-rose-950/90 text-rose-300 border-rose-900/50" 
+            : "bg-slate-950 text-[var(--teal-light)] border-[var(--teal)]/40"
+        }`}>
+          {toast.type === "error" ? <AlertCircle className="w-5 h-5 text-rose-400" /> : <Check className="w-5 h-5 text-[var(--teal)]" />}
+          <span className="text-sm font-semibold">{toast.msg}</span>
+        </div>
+      )}
+
       {/* Patient Sidebar Info & Selector */}
       <div className="w-full md:w-80 border-r border-slate-800 bg-slate-900/50 p-6 flex flex-col h-full overflow-y-auto shrink-0">
         <div className="mb-6">
@@ -244,7 +362,14 @@ export default function ClinicalNotesView() {
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   S: Subjective (Patient Complaints & Symptoms)
                 </span>
-                <span className="text-slate-500"><Mic className="w-3.5 h-3.5" /></span>
+                <button 
+                  type="button" 
+                  onClick={handleMicClick}
+                  className={`transition-colors ${isRecording ? "text-red-400 animate-pulse" : "text-slate-500 hover:text-[var(--teal-light)]"}`}
+                  title={isRecording ? "Recording..." : "Start Voice Dictation"}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
               </div>
               <textarea
                 value={subjective}
@@ -262,8 +387,19 @@ export default function ClinicalNotesView() {
                   O: Objective (Clinical Observations / Findings)
                 </span>
                 <div className="flex gap-2">
-                  <span className="text-slate-500"><Camera className="w-3.5 h-3.5" /></span>
-                  <span className="text-slate-500"><ImageIcon className="w-3.5 h-3.5" /></span>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*,.pdf" 
+                    onChange={handleFileUpload} 
+                  />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="text-slate-500 hover:text-[var(--teal-light)] transition-colors" title="Upload Image or Document">
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="text-slate-500 hover:text-[var(--teal-light)] transition-colors" title="Upload Image or Document">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
               <textarea
@@ -281,7 +417,9 @@ export default function ClinicalNotesView() {
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   P: Plan (Clinical Protocol / Next Steps)
                 </span>
-                <span className="text-slate-500"><Paperclip className="w-3.5 h-3.5" /></span>
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-slate-500 hover:text-[var(--teal-light)] transition-colors" title="Attach Document">
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
               </div>
               <textarea
                 value={assessmentPlan}

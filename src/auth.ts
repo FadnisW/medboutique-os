@@ -81,6 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt", // Use JSON Web Tokens for session handling
+    maxAge: 24 * 60 * 60, // Enforce 24 hour session expiration (in seconds)
   },
   cookies: {
     sessionToken: {

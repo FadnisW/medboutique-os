@@ -143,21 +143,29 @@ export async function saveSOAPNote(
       if (attachmentUrls.length > 20) {
         return { success: false, error: "Too many attachments (max 20)" };
       }
-      for (const att of attachmentUrls) {
-        if (!att.fileUrl || typeof att.fileUrl !== "string" || att.fileUrl.length > 2000) {
+      for (let att of attachmentUrls) {
+        if (!att.fileUrl || typeof att.fileUrl !== "string") {
           return { success: false, error: "Invalid attachment URL" };
+        }
+        
+        att.fileUrl = att.fileUrl.trim();
+        
+        // Allow up to 5MB for base64 data URIs
+        if (att.fileUrl.length > 5000000) {
+          return { success: false, error: "Attachment URL/data exceeds maximum size" };
         }
         if (!att.fileType || typeof att.fileType !== "string" || att.fileType.length > 50) {
           return { success: false, error: "Invalid attachment file type" };
         }
-        // Basic URL validation - must start with http:// or https://
-        try {
-          const url = new URL(att.fileUrl);
-          if (!["http:", "https:"].includes(url.protocol)) {
-            return { success: false, error: "Attachment URL must use HTTPS" };
-          }
-        } catch {
-          return { success: false, error: "Invalid attachment URL format" };
+        
+        // Basic URL validation - must start with http://, https://, or data:
+        if (!att.fileUrl.startsWith("http://") && !att.fileUrl.startsWith("https://") && !att.fileUrl.startsWith("data:")) {
+           // auto-prefix with https if it looks like a naked domain
+           if (att.fileUrl.includes(".") && !att.fileUrl.includes(" ")) {
+             att.fileUrl = "https://" + att.fileUrl;
+           } else {
+             return { success: false, error: "Attachment URL must be valid HTTP, HTTPS or Base64 data URI" };
+           }
         }
       }
     }

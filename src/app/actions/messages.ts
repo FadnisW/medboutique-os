@@ -240,14 +240,27 @@ export async function sendMessage(conversationId: string, content: string) {
 /**
  * Helper server action to initialize a conversation if it doesn't exist yet.
  */
-export async function startConversation(patientProfileId: string) {
+export async function startConversation(patientProfileId?: string) {
   try {
     const session = await auth();
     if (!session?.user) {
       return { success: false, error: "Unauthorized" };
     }
-    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
-      return { success: false, error: "Forbidden" };
+
+    let resolvedPatientProfileId = patientProfileId;
+
+    if (session.user.role === "PATIENT") {
+      const patient = await db.patientProfile.findUnique({
+        where: { userId: session.user.id },
+      });
+      if (!patient) {
+        return { success: false, error: "Patient profile not found" };
+      }
+      resolvedPatientProfileId = patient.id;
+    } else {
+      if (!resolvedPatientProfileId) {
+        return { success: false, error: "Patient Profile ID is required for clinical users" };
+      }
     }
 
     const doctors = await db.doctorProfile.findMany();
@@ -260,12 +273,12 @@ export async function startConversation(patientProfileId: string) {
     const conversation = await db.conversation.upsert({
       where: {
         patientId_doctorId: {
-          patientId: patientProfileId,
+          patientId: resolvedPatientProfileId,
           doctorId,
         },
       },
       create: {
-        patientId: patientProfileId,
+        patientId: resolvedPatientProfileId,
         doctorId,
       },
       update: {},

@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import { MessageSquare, Send, Search, User, ShieldAlert, Sparkles, CheckCheck } from "lucide-react";
 import { getConversations, getMessages, sendMessage, markAsRead } from "@/app/actions/messages";
+import { useSession } from "next-auth/react";
 
 export default function AdminMessages() {
+  const { data: session } = useSession();
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -99,8 +101,8 @@ export default function AdminMessages() {
       {
         id: tempId,
         content: currentMessageText,
-        senderId: "me", // Will align with current session on fetch
-        senderName: "Doctor",
+        senderId: session?.user?.id || "me", // Uses the session user ID
+        senderName: session?.user?.name || "Doctor",
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -221,7 +223,7 @@ export default function AdminMessages() {
               {/* Chat history */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-950/15">
                 {messages.map((msg) => {
-                  const isMe = msg.senderId !== activeConv.id; // Sender isn't the patient, so it's clinical staff
+                  const isMe = msg.senderId === session?.user?.id; // Compare with the logged in user's ID
                   return (
                     <div
                       key={msg.id}

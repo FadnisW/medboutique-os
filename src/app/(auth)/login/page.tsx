@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Stethoscope, Eye, EyeOff, Loader2 } from "lucide-react";
@@ -31,8 +31,7 @@ export default function LoginPage() {
         setError("Invalid email or password");
       } else {
         // Fetch the session to determine the user's role and redirect dynamically
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
+        const session = await getSession();
         const role = session?.user?.role;
 
         if (role === "DOCTOR" || role === "RECEPTIONIST") {

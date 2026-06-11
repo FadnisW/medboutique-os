@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import { MessageSquare, Send, User, Sparkles, AlertCircle, CheckCheck } from "lucide-react";
 import { getConversations, getMessages, sendMessage, startConversation } from "@/app/actions/messages";
+import { useSession } from "next-auth/react";
 
 export default function PatientMessages() {
+  const { data: session } = useSession();
   const [convId, setConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -95,7 +97,7 @@ export default function PatientMessages() {
       {
         id: Math.random().toString(),
         content: msgText,
-        senderId: "me", // Handled by server on real dispatch
+        senderId: session?.user?.id || "me", // Handled by server on real dispatch
         senderName: "Me",
         createdAt: new Date().toISOString(),
       },
@@ -154,7 +156,7 @@ export default function PatientMessages() {
             </div>
           ) : (
             messages.map((msg) => {
-              const isMe = msg.senderId !== "doctor-id-placeholder" && msg.senderName !== "Dr. Aisha Rao"; // Simplified check
+              const isMe = msg.senderId === session?.user?.id;
               return (
                 <div
                   key={msg.id}

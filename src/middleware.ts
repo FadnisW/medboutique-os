@@ -69,8 +69,12 @@ export default auth((req) => {
   }
 
   // 5. Patient Portal routes require PATIENT, DOCTOR, or RECEPTIONIST (any authenticated user is fine)
+  // However, DOCTOR and RECEPTIONIST should be redirected to their own dashboard
   if (isPortalRoute) {
-    // All authenticated users are allowed, so we just proceed
+    if (role === "DOCTOR" || role === "RECEPTIONIST") {
+      return Response.redirect(new URL("/admin", nextUrl));
+    }
+    // Proceed for PATIENT
     return;
   }
 
