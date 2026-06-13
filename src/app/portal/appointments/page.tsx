@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Calendar, Clock, MapPin, AlertCircle, RefreshCw, XCircle, Loader2, Check } from "lucide-react";
 import { 
   getPatientAppointments, 
@@ -164,9 +165,17 @@ export default function AppointmentsTimeline() {
         </div>
       )}
 
-      <div className="mb-12">
-        <h1 className="font-display text-4xl font-semibold text-[var(--primary)] mb-2">My Appointments</h1>
-        <p className="text-[var(--on-surface-variant)]">Manage your upcoming treatments and view past sessions.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12">
+        <div>
+          <h1 className="font-display text-4xl font-semibold text-[var(--primary)] mb-2">My Appointments</h1>
+          <p className="text-[var(--on-surface-variant)]">Manage your upcoming treatments and view past sessions.</p>
+        </div>
+        <Link
+          href="/portal/book"
+          className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-full font-semibold transition-colors shadow-sm cursor-pointer text-sm shrink-0"
+        >
+          Book Appointment
+        </Link>
       </div>
 
       {appointments.length === 0 ? (
@@ -174,6 +183,12 @@ export default function AppointmentsTimeline() {
           <Calendar className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="font-semibold text-lg text-[var(--primary)]">No appointments yet</h3>
           <p className="text-[var(--on-surface-variant)] text-sm mt-1 mb-6">Book your first session to begin your skincare journey.</p>
+          <Link
+            href="/portal/book"
+            className="inline-flex bg-teal-650 hover:bg-teal-700 text-white px-6 py-3 rounded-full font-semibold transition-colors shadow-sm cursor-pointer text-sm"
+          >
+            Book Appointment
+          </Link>
         </div>
       ) : (
         <div className="relative border-l-2 border-[var(--surface-dim)] ml-6 pl-8 space-y-12">

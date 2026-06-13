@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Eye, EyeOff, Check, Upload, Plug, Info, Plus, Copy, Trash2, Edit3, Loader2 } from "lucide-react";
+import { Save, Eye, EyeOff, Check, Upload, Plug, Info, Plus, Copy, Trash2, Edit3, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { getClinicSettings, saveClinicSettings } from "@/app/actions/settings";
 import { getFormTemplates, createFormTemplate, editFormTemplate, duplicateFormTemplate, archiveFormTemplate } from "@/app/actions/templates";
+import { getTreatments, createTreatment, updateTreatment } from "@/app/actions/treatments";
 
-type SettingsTab = "profile" | "scheduling" | "integrations" | "notifications" | "templates";
+type SettingsTab = "profile" | "scheduling" | "integrations" | "notifications" | "templates" | "treatments";
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
@@ -45,6 +46,19 @@ export default function AdminSettingsPage() {
     isMandatory: true,
   });
 
+  // Treatments Management State
+  const [treatmentsList, setTreatmentsList] = useState<any[]>([]);
+  const [editingTreatment, setEditingTreatment] = useState<any | null>(null);
+  const [isCreatingNewTreatment, setIsCreatingNewTreatment] = useState(false);
+  const [treatmentForm, setTreatmentForm] = useState({
+    name: "",
+    description: "",
+    duration: 60,
+    price: 1000,
+    depositAmount: "",
+    fullPaymentRequired: false,
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -55,6 +69,7 @@ export default function AdminSettingsPage() {
     { id: "integrations", label: "Integrations" },
     { id: "notifications", label: "Notifications" },
     { id: "templates", label: "Safety Templates" },
+    { id: "treatments", label: "Treatments" },
   ];
 
   const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -90,6 +105,11 @@ export default function AdminSettingsPage() {
       const tempRes = await getFormTemplates();
       if (tempRes.success && tempRes.templates) {
         setTemplates(tempRes.templates);
+      }
+
+      const treatRes = await getTreatments(false);
+      if (treatRes.success && treatRes.treatments) {
+        setTreatmentsList(treatRes.treatments);
       }
     } catch (err) {
       console.error(err);
@@ -185,6 +205,70 @@ export default function AdminSettingsPage() {
     setIsCreatingNew(true);
   };
 
+  // ── Treatment Handlers ──
+  const handleSaveTreatment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const payload = {
+      name: treatmentForm.name,
+      description: treatmentForm.description || undefined,
+      duration: treatmentForm.duration,
+      price: treatmentForm.price,
+      depositAmount: treatmentForm.depositAmount ? Number(treatmentForm.depositAmount) : null,
+      fullPaymentRequired: treatmentForm.fullPaymentRequired,
+    };
+    let res;
+    if (editingTreatment) {
+      res = await updateTreatment(editingTreatment.id, payload);
+    } else {
+      res = await createTreatment(payload);
+    }
+
+    if (res.success) {
+      setToastMsg(editingTreatment ? "Treatment updated!" : "Treatment created successfully!");
+      setTimeout(() => setToastMsg(null), 3000);
+      setIsCreatingNewTreatment(false);
+      setEditingTreatment(null);
+      setTreatmentForm({ name: "", description: "", duration: 60, price: 1000, depositAmount: "", fullPaymentRequired: false });
+      const treatRes = await getTreatments(false);
+      if (treatRes.success && treatRes.treatments) {
+        setTreatmentsList(treatRes.treatments);
+      }
+    } else {
+      alert(res.error || "Failed to save treatment");
+    }
+    setSaving(false);
+  };
+
+  const handleToggleTreatmentActive = async (id: string, currentlyActive: boolean) => {
+    setSaving(true);
+    const res = await updateTreatment(id, { isActive: !currentlyActive });
+    if (res.success) {
+      setToastMsg(!currentlyActive ? "Treatment activated!" : "Treatment deactivated!");
+      setTimeout(() => setToastMsg(null), 3000);
+      const treatRes = await getTreatments(false);
+      if (treatRes.success && treatRes.treatments) {
+        setTreatmentsList(treatRes.treatments);
+      }
+    } else {
+      alert(res.error || "Failed to toggle treatment status");
+    }
+    setSaving(false);
+  };
+
+  const startEditTreatment = (t: any) => {
+    setEditingTreatment(t);
+    setTreatmentForm({
+      name: t.name,
+      description: t.description || "",
+      duration: t.duration,
+      price: t.price,
+      depositAmount: t.depositAmount ? String(t.depositAmount) : "",
+      fullPaymentRequired: t.fullPaymentRequired,
+    });
+    setIsCreatingNewTreatment(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#faf9f5]">
@@ -234,6 +318,8 @@ export default function AdminSettingsPage() {
               setActiveTab(tab.id);
               setIsCreatingNew(false);
               setEditingTemplate(null);
+              setIsCreatingNewTreatment(false);
+              setEditingTreatment(null);
             }}
             className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 -mb-px cursor-pointer shrink-0 ${
               activeTab === tab.id
@@ -604,6 +690,195 @@ export default function AdminSettingsPage() {
                           title="Archive Template"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Treatments Management Tab */}
+      {activeTab === "treatments" && (
+        <div className="space-y-6">
+          {isCreatingNewTreatment ? (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+              <h3 className="text-slate-950 font-semibold mb-6 text-base">{editingTreatment ? "Edit Treatment" : "Add New Treatment"}</h3>
+              <form onSubmit={handleSaveTreatment} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Treatment Name</label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. HydraFacial Deluxe"
+                    value={treatmentForm.name}
+                    onChange={(e) => setTreatmentForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Description (Optional)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe the treatment procedure, benefits, and what the patient can expect..."
+                    value={treatmentForm.description}
+                    onChange={(e) => setTreatmentForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors resize-none text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Duration (Minutes)</label>
+                    <input
+                      required
+                      type="number"
+                      min={5}
+                      max={480}
+                      value={treatmentForm.duration}
+                      onChange={(e) => setTreatmentForm(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Price (₹)</label>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={treatmentForm.price}
+                      onChange={(e) => setTreatmentForm(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Deposit Amount (₹) — Optional</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Leave blank for no deposit"
+                      value={treatmentForm.depositAmount}
+                      onChange={(e) => setTreatmentForm(prev => ({ ...prev, depositAmount: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50">
+                    <span className="text-xs text-slate-650 font-medium">Require Full Payment Upfront</span>
+                    <button
+                      type="button"
+                      onClick={() => setTreatmentForm(prev => ({ ...prev, fullPaymentRequired: !prev.fullPaymentRequired }))}
+                      className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${treatmentForm.fullPaymentRequired ? "bg-teal-600" : "bg-slate-200"}`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${treatmentForm.fullPaymentRequired ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {treatmentForm.depositAmount && !treatmentForm.fullPaymentRequired && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 flex gap-2 text-xs text-amber-800">
+                    <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      Patients will pay <strong>₹{Number(treatmentForm.depositAmount).toLocaleString("en-IN")}</strong> deposit during booking. The remaining balance of{" "}
+                      <strong>₹{(treatmentForm.price - Number(treatmentForm.depositAmount)).toLocaleString("en-IN")}</strong> will be collected at the clinic.
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? <LoaderSpinner className="w-3 h-3" /> : <Save className="w-3.5 h-3.5" />} {editingTreatment ? "Update Treatment" : "Create Treatment"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNewTreatment(false);
+                      setEditingTreatment(null);
+                      setTreatmentForm({ name: "", description: "", duration: 60, price: 1000, depositAmount: "", fullPaymentRequired: false });
+                    }}
+                    className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-slate-900 font-semibold text-base">Treatment Plans & Pricing</h3>
+                <button
+                  onClick={() => setIsCreatingNewTreatment(true)}
+                  className="flex items-center gap-1.5 bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-teal-700 transition-colors shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Add Treatment
+                </button>
+              </div>
+
+              <div className="grid gap-4">
+                {treatmentsList.length === 0 ? (
+                  <div className="bg-white border border-slate-100 rounded-3xl p-8 text-center text-slate-450 text-xs italic">
+                    No treatments configured. Add treatment plans for patients to select during booking.
+                  </div>
+                ) : (
+                  treatmentsList.map(t => (
+                    <div
+                      key={t.id}
+                      className={`bg-white rounded-2xl p-5 border shadow-sm hover:border-slate-200 transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4 ${
+                        t.isActive ? "border-slate-100" : "border-slate-100 opacity-60"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h4 className="font-semibold text-slate-900 text-sm">{t.name}</h4>
+                          <span className="text-[8px] font-bold uppercase bg-slate-50 text-slate-650 px-2 py-0.5 rounded-full border border-slate-100">
+                            {t.duration} min
+                          </span>
+                          {t.fullPaymentRequired && (
+                            <span className="text-[8px] font-bold uppercase bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full border border-teal-100">
+                              Full Payment
+                            </span>
+                          )}
+                          {!t.isActive && (
+                            <span className="text-[8px] font-bold uppercase bg-red-50 text-red-700 px-2 py-0.5 rounded-full border border-red-100">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 line-clamp-1 pr-4">{t.description || "No description provided."}</p>
+                        <div className="flex items-center gap-3 mt-2 text-xs">
+                          <span className="font-bold text-slate-900">₹{Number(t.price).toLocaleString("en-IN")}</span>
+                          {t.depositAmount && !t.fullPaymentRequired && (
+                            <span className="text-amber-700 font-medium">
+                              (₹{Number(t.depositAmount).toLocaleString("en-IN")} deposit)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleToggleTreatmentActive(t.id, t.isActive)}
+                          className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${t.isActive ? "bg-teal-600" : "bg-slate-200"}`}
+                          title={t.isActive ? "Deactivate" : "Activate"}
+                        >
+                          <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${t.isActive ? "translate-x-4" : "translate-x-0"}`} />
+                        </button>
+                        <button
+                          onClick={() => startEditTreatment(t)}
+                          className="bg-white border border-slate-200 text-slate-700 p-2 rounded-lg hover:bg-slate-50 hover:text-slate-950 transition-colors cursor-pointer"
+                          title="Edit Treatment"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>

@@ -8,6 +8,8 @@ import {
   bookAppointment,
   updateAppointmentStatus,
   deleteAvailabilitySlot,
+  generateDaySchedule,
+  generateWeekSchedule,
 } from "@/app/actions/calendar";
 import { AppointmentStatus } from "@prisma/client";
 
@@ -42,6 +44,33 @@ export default function AdminCalendarPage() {
   const [showAddSlot, setShowAddSlot] = useState(false);
   const [showBookApt, setShowBookApt] = useState(false);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState<any | null>(null);
+
+  // Bulk Generation Modals & States
+  const [showBulkDay, setShowBulkDay] = useState(false);
+  const [showBulkWeek, setShowBulkWeek] = useState(false);
+
+  // Bulk Day Fields
+  const [bulkDayDate, setBulkDayDate] = useState("");
+  const [bulkDayStart, setBulkDayStart] = useState("09:00");
+  const [bulkDayEnd, setBulkDayEnd] = useState("17:00");
+  const [bulkDayDuration, setBulkDayDuration] = useState(60);
+  const [bulkDayBuffer, setBulkDayBuffer] = useState(15);
+  const [bulkDayHasLunch, setBulkDayHasLunch] = useState(true);
+  const [bulkDayLunchStart, setBulkDayLunchStart] = useState("13:00");
+  const [bulkDayLunchEnd, setBulkDayLunchEnd] = useState("14:00");
+  const [bulkDayMaxAppts, setBulkDayMaxAppts] = useState("");
+
+  // Bulk Week Fields
+  const [bulkWeekStart, setBulkWeekStart] = useState("");
+  const [bulkWeekDays, setBulkWeekDays] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri
+  const [bulkWeekStartHour, setBulkWeekStartHour] = useState("09:00");
+  const [bulkWeekEndHour, setBulkWeekEndHour] = useState("17:00");
+  const [bulkWeekDuration, setBulkWeekDuration] = useState(60);
+  const [bulkWeekBuffer, setBulkWeekBuffer] = useState(15);
+  const [bulkWeekHasLunch, setBulkWeekHasLunch] = useState(true);
+  const [bulkWeekLunchStart, setBulkWeekLunchStart] = useState("13:00");
+  const [bulkWeekLunchEnd, setBulkWeekLunchEnd] = useState("14:00");
+  const [bulkWeekMaxAppts, setBulkWeekMaxAppts] = useState("");
 
   // Form states
   const [slotDate, setSlotDate] = useState("");
@@ -118,6 +147,67 @@ export default function AdminCalendarPage() {
       loadData(currentDate);
     } else {
       alert(res.error || "Failed to create slot");
+    }
+  };
+
+  const handleBulkDaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data?.doctors?.[0]?.id || !bulkDayDate) return;
+
+    const breaks = bulkDayHasLunch
+      ? [{ startTime: bulkDayLunchStart, endTime: bulkDayLunchEnd }]
+      : [];
+
+    const maxAppts = bulkDayMaxAppts ? Number(bulkDayMaxAppts) : undefined;
+
+    const res = await generateDaySchedule(
+      data.doctors[0].id,
+      bulkDayDate,
+      bulkDayStart,
+      bulkDayEnd,
+      bulkDayDuration,
+      bulkDayBuffer,
+      breaks,
+      maxAppts
+    );
+
+    if (res.success) {
+      alert(`Successfully generated day schedule! Created ${res.createdCount} new slot(s), skipped ${res.skippedCount} overlapping slot(s).`);
+      setShowBulkDay(false);
+      loadData(currentDate);
+    } else {
+      alert(res.error || "Failed to generate day schedule");
+    }
+  };
+
+  const handleBulkWeekSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data?.doctors?.[0]?.id || !bulkWeekStart) return;
+
+    const breaks = bulkWeekHasLunch
+      ? [{ startTime: bulkWeekLunchStart, endTime: bulkWeekLunchEnd }]
+      : [];
+
+    const maxAppts = bulkWeekMaxAppts ? Number(bulkWeekMaxAppts) : undefined;
+
+    const res = await generateWeekSchedule(
+      data.doctors[0].id,
+      bulkWeekStart,
+      bulkWeekDays,
+      bulkWeekStartHour,
+      bulkWeekEndHour,
+      bulkWeekDuration,
+      bulkWeekBuffer,
+      breaks,
+      maxAppts
+    );
+
+    if (res.success) {
+      alert(`Successfully generated week schedule! Created ${res.totalCreated} new slot(s), skipped ${res.totalSkipped} overlapping slot(s).`);
+      setShowBulkWeek(false);
+      loadData(currentDate);
+    } else {
+      alert(res.error || "Failed to generate week schedule");
     }
   };
 
@@ -229,9 +319,32 @@ export default function AdminCalendarPage() {
               setSlotDate(new Date().toISOString().split("T")[0]);
               setShowAddSlot(true);
             }}
-            className="flex items-center gap-2 bg-[var(--teal-dark)] border border-[var(--teal)]/30 text-[var(--teal-light)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--teal)] hover:text-white transition-colors"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" /> Add Slot
+          </button>
+          <button
+            onClick={() => {
+              setBulkDayDate(new Date().toISOString().split("T")[0]);
+              setShowBulkDay(true);
+            }}
+            className="flex items-center gap-2 bg-[var(--teal-dark)] border border-[var(--teal)]/30 text-[var(--teal-light)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--teal)] hover:text-white transition-colors"
+          >
+            <Calendar className="w-4 h-4" /> Generate Full Day
+          </button>
+          <button
+            onClick={() => {
+              // Find the upcoming Monday if possible, or just default to today
+              const today = new Date();
+              const day = today.getDay();
+              const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+              const monday = new Date(today.setDate(diff));
+              setBulkWeekStart(monday.toISOString().split("T")[0]);
+              setShowBulkWeek(true);
+            }}
+            className="flex items-center gap-2 bg-[var(--teal-dark)] border border-[var(--teal)]/30 text-[var(--teal-light)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--teal)] hover:text-white transition-colors"
+          >
+            <Clock className="w-4 h-4" /> Generate Full Week
           </button>
         </div>
       </div>
@@ -523,6 +636,317 @@ export default function AdminCalendarPage() {
                 className="w-full bg-[var(--teal)] hover:bg-[var(--teal-light)] text-slate-950 font-bold py-2.5 rounded-lg transition-colors mt-6"
               >
                 Confirm Appointment
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Generate Full Day Schedule */}
+      {showBulkDay && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowBulkDay(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="font-display text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[var(--teal-light)]" /> Generate Full Day Schedule
+            </h3>
+            <form onSubmit={handleBulkDaySubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={bulkDayDate}
+                  onChange={(e) => setBulkDayDate(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    required
+                    value={bulkDayStart}
+                    onChange={(e) => setBulkDayStart(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">End Time</label>
+                  <input
+                    type="time"
+                    required
+                    value={bulkDayEnd}
+                    onChange={(e) => setBulkDayEnd(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Slot Duration (Min)</label>
+                  <select
+                    value={bulkDayDuration}
+                    onChange={(e) => setBulkDayDuration(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  >
+                    <option value={15}>15 Min</option>
+                    <option value={30}>30 Min</option>
+                    <option value={45}>45 Min</option>
+                    <option value={60}>60 Min</option>
+                    <option value={90}>90 Min</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Buffer Time (Min)</label>
+                  <select
+                    value={bulkDayBuffer}
+                    onChange={(e) => setBulkDayBuffer(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  >
+                    <option value={0}>0 Min</option>
+                    <option value={5}>5 Min</option>
+                    <option value={10}>10 Min</option>
+                    <option value={15}>15 Min</option>
+                    <option value={20}>20 Min</option>
+                    <option value={30}>30 Min</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Include Lunch Break</span>
+                  <input
+                    type="checkbox"
+                    checked={bulkDayHasLunch}
+                    onChange={(e) => setBulkDayHasLunch(e.target.checked)}
+                    className="w-4 h-4 text-[var(--teal)] rounded focus:ring-[var(--teal)]"
+                  />
+                </div>
+                
+                {bulkDayHasLunch && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Lunch Start</label>
+                      <input
+                        type="time"
+                        value={bulkDayLunchStart}
+                        onChange={(e) => setBulkDayLunchStart(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Lunch End</label>
+                      <input
+                        type="time"
+                        value={bulkDayLunchEnd}
+                        onChange={(e) => setBulkDayLunchEnd(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Max Appts (Optional)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 8"
+                  value={bulkDayMaxAppts}
+                  onChange={(e) => setBulkDayMaxAppts(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-[var(--teal)] hover:bg-[var(--teal-light)] text-slate-950 font-bold py-2.5 rounded-lg transition-colors mt-6 text-sm"
+              >
+                Generate Day Slots
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Generate Full Week Schedule */}
+      {showBulkWeek && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowBulkWeek(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="font-display text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[var(--teal-light)]" /> Generate Full Week Schedule
+            </h3>
+            <form onSubmit={handleBulkWeekSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Week Start Date (Monday)</label>
+                <input
+                  type="date"
+                  required
+                  value={bulkWeekStart}
+                  onChange={(e) => setBulkWeekStart(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Select Working Days</label>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { label: "M", val: 1 },
+                    { label: "T", val: 2 },
+                    { label: "W", val: 3 },
+                    { label: "T", val: 4 },
+                    { label: "F", val: 5 },
+                    { label: "S", val: 6 },
+                    { label: "S", val: 0 },
+                  ].map((day) => {
+                    const isChecked = bulkWeekDays.includes(day.val);
+                    return (
+                      <button
+                        key={day.val}
+                        type="button"
+                        onClick={() => {
+                          if (isChecked) {
+                            setBulkWeekDays(prev => prev.filter(v => v !== day.val));
+                          } else {
+                            setBulkWeekDays(prev => [...prev, day.val]);
+                          }
+                        }}
+                        className={`w-9 h-9 rounded-full font-bold text-xs transition-colors ${
+                          isChecked
+                            ? "bg-[var(--teal)] text-slate-950"
+                            : "bg-slate-800 text-slate-400 hover:bg-slate-750"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start Hour</label>
+                  <input
+                    type="time"
+                    required
+                    value={bulkWeekStartHour}
+                    onChange={(e) => setBulkWeekStartHour(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">End Hour</label>
+                  <input
+                    type="time"
+                    required
+                    value={bulkWeekEndHour}
+                    onChange={(e) => setBulkWeekEndHour(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Duration (Min)</label>
+                  <select
+                    value={bulkWeekDuration}
+                    onChange={(e) => setBulkWeekDuration(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  >
+                    <option value={15}>15 Min</option>
+                    <option value={30}>30 Min</option>
+                    <option value={45}>45 Min</option>
+                    <option value={60}>60 Min</option>
+                    <option value={90}>90 Min</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Buffer (Min)</label>
+                  <select
+                    value={bulkWeekBuffer}
+                    onChange={(e) => setBulkWeekBuffer(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                  >
+                    <option value={0}>0 Min</option>
+                    <option value={5}>5 Min</option>
+                    <option value={10}>10 Min</option>
+                    <option value={15}>15 Min</option>
+                    <option value={20}>20 Min</option>
+                    <option value={30}>30 Min</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Include Lunch Break</span>
+                  <input
+                    type="checkbox"
+                    checked={bulkWeekHasLunch}
+                    onChange={(e) => setBulkWeekHasLunch(e.target.checked)}
+                    className="w-4 h-4 text-[var(--teal)] rounded focus:ring-[var(--teal)]"
+                  />
+                </div>
+                
+                {bulkWeekHasLunch && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Lunch Start</label>
+                      <input
+                        type="time"
+                        value={bulkWeekLunchStart}
+                        onChange={(e) => setBulkWeekLunchStart(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Lunch End</label>
+                      <input
+                        type="time"
+                        value={bulkWeekLunchEnd}
+                        onChange={(e) => setBulkWeekLunchEnd(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Max Appts/Day (Optional)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 8"
+                  value={bulkWeekMaxAppts}
+                  onChange={(e) => setBulkWeekMaxAppts(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-sm"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-[var(--teal)] hover:bg-[var(--teal-light)] text-slate-950 font-bold py-2.5 rounded-lg transition-colors mt-6 text-sm"
+              >
+                Generate Week Slots
               </button>
             </form>
           </div>

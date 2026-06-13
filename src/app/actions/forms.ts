@@ -71,10 +71,45 @@ export async function completeSafetyForm(instanceId: string, signatureUrl?: stri
         completedAt: new Date(),
         signatureUrl,
         responseJson
+      },
+      include: {
+        appointment: true
       }
     });
 
+    const appointment = instance.appointment;
+    if (appointment && appointment.status === "PENDING_REQUIRED_FORMS") {
+      // Find all mandatory templates
+      const mandatoryTemplates = await db.safetyFormTemplate.findMany({
+        where: {
+          isMandatory: true,
+          isArchived: false
+        }
+      });
+      const mandatoryTemplateIds = mandatoryTemplates.map(t => t.id);
+
+      // Find all current safety form instances for this appointment
+      const allInstances = await db.safetyFormInstance.findMany({
+        where: { appointmentId: appointment.id }
+      });
+
+      // Filter to only mandatory ones and check if all are completed
+      const mandatoryInstancesForAppt = allInstances.filter(inst => mandatoryTemplateIds.includes(inst.templateId));
+      const allCompleted = mandatoryInstancesForAppt.length > 0
+        ? mandatoryInstancesForAppt.every(inst => inst.status === "COMPLETED")
+        : true;
+
+      if (allCompleted) {
+        await db.appointment.update({
+          where: { id: appointment.id },
+          data: { status: "CONFIRMED" }
+        });
+      }
+    }
+
     revalidatePath("/admin");
+    revalidatePath("/portal/appointments");
+    revalidatePath("/portal/dashboard");
     return { success: true, instance };
   } catch (error) {
     console.error("Error in completeSafetyForm:", error);
@@ -118,5 +153,23 @@ export async function getMissingFormsForAppointment(appointmentId: string) {
   } catch (error) {
     console.error("Error in getMissingFormsForAppointment:", error);
     return { success: false, error: "Failed to retrieve missing forms" };
+  }
+}
+
+export async function getFormInstancesForAppointment(appointmentId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const instances = await db.safetyFormInstance.findMany({
+      where: { appointmentId }
+    });
+
+    return { success: true, instances };
+  } catch (error) {
+    console.error("Error in getFormInstancesForAppointment:", error);
+    return { success: false, error: "Failed to retrieve form instances" };
   }
 }

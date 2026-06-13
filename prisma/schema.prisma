@@ -17,6 +17,7 @@ enum Role {
 
 enum AppointmentStatus {
   PENDING_PAYMENT
+  PENDING_REQUIRED_FORMS
   CONFIRMED
   COMPLETED
   CANCELLED
@@ -113,6 +114,7 @@ model Appointment {
   reason             String?           @db.Text
   notes              String?           @db.Text
   paymentId          String?           @unique @map("payment_id") // Relates to Payment table
+  treatmentId        String?           @map("treatment_id")
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -120,6 +122,7 @@ model Appointment {
   doctor             DoctorProfile     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   slot               AvailabilitySlot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
   payment            Payment?          @relation(fields: [paymentId], references: [id])
+  treatment          Treatment?        @relation(fields: [treatmentId], references: [id])
   statusLogs         PatientStatusLog[]
   formInstances      SafetyFormInstance[]
 
@@ -362,6 +365,23 @@ model SafetyFormInstance {
   sentBy         User?              @relation("SentForms", fields: [sentById], references: [id])
 
   @@map("safety_form_instances")
+}
+
+model Treatment {
+  id                  String        @id @default(cuid())
+  name                String
+  description         String?       @db.Text
+  duration            Int           // in minutes
+  price               Decimal       @db.Decimal(10, 2)
+  depositAmount       Decimal?      @db.Decimal(10, 2) @map("deposit_amount")
+  fullPaymentRequired Boolean       @default(false) @map("full_payment_required")
+  isActive            Boolean       @default(true) @map("is_active")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  appointments        Appointment[]
+
+  @@map("treatments")
 }
 
 

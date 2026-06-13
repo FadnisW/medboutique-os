@@ -362,3 +362,208 @@ export async function deleteAvailabilitySlot(slotId: string) {
     return { success: false, error: "Failed to delete slot" };
   }
 }
+
+interface BreakPeriod {
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+}
+
+function parseDateTime(dateStr: string, timeStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+export async function generateDaySchedule(
+  doctorId: string,
+  dateStr: string, // "YYYY-MM-DD"
+  startTime: string, // "HH:MM"
+  endTime: string, // "HH:MM"
+  slotDuration: number, // minutes
+  bufferTime: number, // minutes
+  breaks: BreakPeriod[],
+  maxAppointments?: number
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
+    if (session.user.role === "DOCTOR") {
+      const doctorProfile = await db.doctorProfile.findUnique({ where: { userId: session.user.id } });
+      if (!doctorProfile || doctorProfile.id !== doctorId) {
+        return { success: false, error: "Forbidden: You can only manage your own schedule" };
+      }
+    }
+
+    // Generate slots list
+    let currentStart = parseDateTime(dateStr, startTime);
+    const dayEnd = parseDateTime(dateStr, endTime);
+    const breakTimes = breaks.map(b => ({
+      start: parseDateTime(dateStr, b.startTime),
+      end: parseDateTime(dateStr, b.endTime)
+    }));
+
+    const slotsToCreate = [];
+    let apptCount = 0;
+
+    while (true) {
+      const currentEnd = new Date(currentStart.getTime() + slotDuration * 60000);
+      if (currentEnd > dayEnd) {
+        break;
+      }
+
+      if (maxAppointments && apptCount >= maxAppointments) {
+        break;
+      }
+
+      const overlapsBreak = breakTimes.some(b => {
+        return currentStart < b.end && currentEnd > b.start;
+      });
+
+      if (!overlapsBreak) {
+        slotsToCreate.push({
+          doctorId,
+          startTime: new Date(currentStart),
+          endTime: new Date(currentEnd),
+          isBooked: false,
+        });
+        apptCount++;
+      }
+
+      currentStart = new Date(currentEnd.getTime() + bufferTime * 60000);
+    }
+
+    if (slotsToCreate.length === 0) {
+      return { success: false, error: "No slots could be generated under the current settings" };
+    }
+
+    // Get existing slots for the day
+    const dayStartLimit = parseDateTime(dateStr, "00:00");
+    const dayEndLimit = parseDateTime(dateStr, "23:59");
+    const existingSlots = await db.availabilitySlot.findMany({
+      where: {
+        doctorId,
+        startTime: {
+          gte: dayStartLimit,
+          lte: dayEndLimit,
+        },
+      },
+    });
+
+    // Filter out overlapping slots
+    const nonOverlappingSlots = slotsToCreate.filter(newSlot => {
+      return !existingSlots.some(ex => {
+        return newSlot.startTime < ex.endTime && newSlot.endTime > ex.startTime;
+      });
+    });
+
+    if (nonOverlappingSlots.length > 0) {
+      await db.availabilitySlot.createMany({
+        data: nonOverlappingSlots,
+      });
+    }
+
+    revalidatePath("/admin/calendar");
+    return { 
+      success: true, 
+      generatedCount: slotsToCreate.length, 
+      createdCount: nonOverlappingSlots.length,
+      skippedCount: slotsToCreate.length - nonOverlappingSlots.length
+    };
+  } catch (error: unknown) {
+    console.error("Error in generateDaySchedule:", error);
+    return { success: false, error: "Failed to generate day schedule" };
+  }
+}
+
+export async function generateWeekSchedule(
+  doctorId: string,
+  startDateStr: string, // "YYYY-MM-DD" of the Monday
+  workingDays: number[], // e.g. [1,2,3,4,5] (Monday is 1, Sunday is 0 or 7 based on JS getDay())
+  startTime: string,
+  endTime: string,
+  slotDuration: number,
+  bufferTime: number,
+  breaks: BreakPeriod[],
+  maxAppointments?: number
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
+    if (session.user.role === "DOCTOR") {
+      const doctorProfile = await db.doctorProfile.findUnique({ where: { userId: session.user.id } });
+      if (!doctorProfile || doctorProfile.id !== doctorId) {
+        return { success: false, error: "Forbidden: You can only manage your own schedule" };
+      }
+    }
+
+    const baseMonday = new Date(startDateStr);
+    if (isNaN(baseMonday.getTime())) {
+      return { success: false, error: "Invalid start date for the week" };
+    }
+
+    let totalGenerated = 0;
+    let totalCreated = 0;
+    let totalSkipped = 0;
+
+    // We loop from 0 to 6 days after Monday
+    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      const currentDayDate = new Date(baseMonday);
+      currentDayDate.setDate(baseMonday.getDate() + dayOffset);
+      
+      // getDay() returns 0 for Sunday, 1 for Monday, etc.
+      const dayOfWeek = currentDayDate.getDay();
+      
+      // Check if this day of week is in workingDays
+      if (!workingDays.includes(dayOfWeek)) {
+        continue;
+      }
+
+      // Format dateStr as YYYY-MM-DD
+      const yyyy = currentDayDate.getFullYear();
+      const mm = String(currentDayDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(currentDayDate.getDate()).padStart(2, "0");
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      const res = await generateDaySchedule(
+        doctorId,
+        dateStr,
+        startTime,
+        endTime,
+        slotDuration,
+        bufferTime,
+        breaks,
+        maxAppointments
+      );
+
+      if (res.success) {
+        totalGenerated += res.generatedCount || 0;
+        totalCreated += res.createdCount || 0;
+        totalSkipped += res.skippedCount || 0;
+      }
+    }
+
+    revalidatePath("/admin/calendar");
+    return {
+      success: true,
+      totalGenerated,
+      totalCreated,
+      totalSkipped,
+    };
+  } catch (error: unknown) {
+    console.error("Error in generateWeekSchedule:", error);
+    return { success: false, error: "Failed to generate week schedule" };
+  }
+}
+
