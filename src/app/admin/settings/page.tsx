@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Eye, EyeOff, Check, Upload, Plug, Info, Loader2 } from "lucide-react";
+import { Save, Eye, EyeOff, Check, Upload, Plug, Info, Plus, Copy, Trash2, Edit3, Loader2 } from "lucide-react";
 import { getClinicSettings, saveClinicSettings } from "@/app/actions/settings";
+import { getFormTemplates, createFormTemplate, editFormTemplate, duplicateFormTemplate, archiveFormTemplate } from "@/app/actions/templates";
 
-type SettingsTab = "profile" | "scheduling" | "integrations" | "notifications";
+type SettingsTab = "profile" | "scheduling" | "integrations" | "notifications" | "templates";
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
@@ -33,6 +34,17 @@ export default function AdminSettingsPage() {
     `Hi {{patient_name}},\n\nYour appointment for {{treatment}} with {{doctor}} is confirmed for {{date}} at {{time}}.\n\nLocation: {{clinic_address}}\n\nSee you soon! — MedBoutique`
   );
 
+  // Safety Form Templates State
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [templateForm, setTemplateForm] = useState({
+    title: "",
+    content: "",
+    category: "CONSENT",
+    isMandatory: true,
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -42,14 +54,16 @@ export default function AdminSettingsPage() {
     { id: "scheduling", label: "Scheduling" },
     { id: "integrations", label: "Integrations" },
     { id: "notifications", label: "Notifications" },
+    { id: "templates", label: "Safety Templates" },
   ];
 
   const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const [openDays, setOpenDays] = useState([true, true, true, true, true, true, false]);
 
-  // Load settings from database on mount
-  useEffect(() => {
-    getClinicSettings().then((res) => {
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const res = await getClinicSettings();
       if (res.success && res.settings) {
         const s = res.settings;
         setProfile({
@@ -72,11 +86,19 @@ export default function AdminSettingsPage() {
         });
         setWhatsappTemplate(s.whatsappTemplate);
       }
-      setLoading(false);
-    }).catch(err => {
+
+      const tempRes = await getFormTemplates();
+      if (tempRes.success && tempRes.templates) {
+        setTemplates(tempRes.templates);
+      }
+    } catch (err) {
       console.error(err);
-      setLoading(false);
-    });
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const handleSave = async (fieldsToSave: any, successMessage: string) => {
@@ -91,12 +113,84 @@ export default function AdminSettingsPage() {
     setSaving(false);
   };
 
+  // ── Template Handlers ──
+  const handleSaveTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    let res;
+    if (editingTemplate) {
+      res = await editFormTemplate(editingTemplate.id, templateForm);
+    } else {
+      res = await createFormTemplate(templateForm);
+    }
+
+    if (res.success) {
+      setToastMsg(editingTemplate ? "Template updated!" : "Template created successfully!");
+      setTimeout(() => setToastMsg(null), 3000);
+      setIsCreatingNew(false);
+      setEditingTemplate(null);
+      setTemplateForm({ title: "", content: "", category: "CONSENT", isMandatory: true });
+      // Reload templates
+      const tempRes = await getFormTemplates();
+      if (tempRes.success && tempRes.templates) {
+        setTemplates(tempRes.templates);
+      }
+    } else {
+      alert(res.error || "Failed to save template");
+    }
+    setSaving(false);
+  };
+
+  const handleDuplicate = async (id: string) => {
+    setSaving(true);
+    const res = await duplicateFormTemplate(id);
+    if (res.success) {
+      setToastMsg("Template duplicated!");
+      setTimeout(() => setToastMsg(null), 3000);
+      const tempRes = await getFormTemplates();
+      if (tempRes.success && tempRes.templates) {
+        setTemplates(tempRes.templates);
+      }
+    } else {
+      alert(res.error || "Failed to duplicate template");
+    }
+    setSaving(false);
+  };
+
+  const handleArchive = async (id: string) => {
+    if (!confirm("Are you sure you want to archive this template?")) return;
+    setSaving(true);
+    const res = await archiveFormTemplate(id);
+    if (res.success) {
+      setToastMsg("Template archived!");
+      setTimeout(() => setToastMsg(null), 3000);
+      const tempRes = await getFormTemplates();
+      if (tempRes.success && tempRes.templates) {
+        setTemplates(tempRes.templates);
+      }
+    } else {
+      alert(res.error || "Failed to archive template");
+    }
+    setSaving(false);
+  };
+
+  const startEdit = (temp: any) => {
+    setEditingTemplate(temp);
+    setTemplateForm({
+      title: temp.title,
+      content: temp.content,
+      category: temp.category,
+      isMandatory: temp.isMandatory,
+    });
+    setIsCreatingNew(true);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-[#faf9f5]">
         <div className="flex flex-col items-center gap-3">
-          <LoaderSpinner className="w-10 h-10 text-[var(--teal)] animate-spin" />
-          <p className="text-slate-400 text-sm font-semibold">Loading settings from cloud database...</p>
+          <LoaderSpinner className="w-10 h-10 text-teal-650 animate-spin" />
+          <p className="text-slate-500 text-sm font-semibold">Loading settings from cloud database...</p>
         </div>
       </div>
     );
@@ -104,43 +198,47 @@ export default function AdminSettingsPage() {
 
   function LoaderSpinner({ className }: { className?: string }) {
     return (
-      <div className={`border-4 border-slate-700 border-t-[var(--teal)] rounded-full animate-spin ${className}`} style={{ borderTopColor: "var(--teal)" }}></div>
+      <div className={`border-4 border-slate-200 border-t-teal-600 rounded-full animate-spin ${className}`}></div>
     );
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-4xl mx-auto relative">
+    <div className="p-6 md:p-10 max-w-4xl mx-auto relative font-sans text-slate-800 bg-[#faf9f5] min-h-screen">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed top-6 right-6 z-50 bg-slate-950 text-[var(--teal-light)] border border-[var(--teal)]/40 px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce">
-          <Check className="w-5 h-5 text-[var(--teal)]" />
+        <div className="fixed top-6 right-6 z-50 bg-slate-900 text-teal-400 border border-slate-800 px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce">
+          <Check className="w-5 h-5 text-teal-500" />
           <span className="text-sm font-semibold">{toastMsg}</span>
         </div>
       )}
 
       {/* Info Banner */}
-      <div className="mb-6 bg-slate-800/40 border border-teal-500/20 rounded-2xl p-4 flex items-center gap-3">
-        <Check className="w-5 h-5 text-[var(--teal)] shrink-0 animate-pulse" />
-        <span className="text-sm text-slate-350">
+      <div className="mb-6 bg-teal-50 border border-teal-100 rounded-2xl p-4 flex items-center gap-3">
+        <Check className="w-5 h-5 text-teal-600 shrink-0" />
+        <span className="text-sm text-teal-900 font-medium">
           Cloud Synchronisation active. Settings are stored securely in PostgreSQL.
         </span>
       </div>
 
       <div className="mb-8">
-        <h1 className="font-display text-3xl font-semibold text-white mb-2">Clinic Settings</h1>
-        <p className="text-slate-400 text-sm">Manage your clinic profile, scheduling rules, and integrations.</p>
+        <h1 className="font-display text-4xl font-semibold text-slate-900 mb-2">Settings Console</h1>
+        <p className="text-slate-500 text-sm">Manage your clinic profile, scheduling rules, and reusable templates.</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0 border-b border-slate-700 mb-8 overflow-x-auto">
+      <div className="flex gap-2 border-b border-slate-200 mb-8 overflow-x-auto">
         {tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setIsCreatingNew(false);
+              setEditingTemplate(null);
+            }}
             className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 -mb-px cursor-pointer shrink-0 ${
               activeTab === tab.id
-                ? "border-[var(--teal)] text-[var(--teal-light)]"
-                : "border-transparent text-slate-400 hover:text-white"
+                ? "border-teal-600 text-teal-700"
+                : "border-transparent text-slate-450 hover:text-slate-700"
             }`}
           >
             {tab.label}
@@ -150,13 +248,13 @@ export default function AdminSettingsPage() {
 
       {/* Clinic Profile Tab */}
       {activeTab === "profile" && (
-        <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700 space-y-6">
+        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm space-y-6">
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Clinic Logo</label>
-            <div className="border-2 border-dashed border-slate-600 rounded-2xl p-8 text-center hover:border-[var(--teal)] transition-colors cursor-pointer group">
-              <Upload className="w-8 h-8 text-slate-500 group-hover:text-[var(--teal-light)] mx-auto mb-3 transition-colors" />
-              <p className="text-sm text-slate-400 group-hover:text-white transition-colors">Drop clinic logo here or click to upload</p>
-              <p className="text-[10px] text-slate-500 mt-1">JPG or PNG, max 2MB</p>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-3">Clinic Logo</label>
+            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-teal-500 transition-colors cursor-pointer group">
+              <Upload className="w-8 h-8 text-slate-400 group-hover:text-teal-600 mx-auto mb-3 transition-colors" />
+              <p className="text-sm text-slate-500 group-hover:text-slate-800 transition-colors">Drop clinic logo here or click to upload</p>
+              <p className="text-[10px] text-slate-450 mt-1">JPG or PNG, max 2MB</p>
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
@@ -167,29 +265,29 @@ export default function AdminSettingsPage() {
               { label: "Contact Phone", value: profile.phone, key: "phone" },
             ].map(field => (
               <div key={field.label}>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">{field.label}</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">{field.label}</label>
                 <input
                   type="text"
                   value={field.value}
                   onChange={(e) => setProfile(prev => ({ ...prev, [field.key]: e.target.value }))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-[var(--teal)] transition-colors"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
                 />
               </div>
             ))}
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Clinic Address</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Clinic Address</label>
             <textarea
               rows={3}
               value={profile.address}
               onChange={(e) => setProfile(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-[var(--teal)] transition-colors resize-none text-sm"
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors resize-none text-sm"
             />
           </div>
           <button 
             disabled={saving}
             onClick={() => handleSave(profile, "Clinic profile synced successfully!")}
-            className="flex items-center gap-2 bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-6 py-3 rounded-xl font-semibold hover:bg-[var(--teal)] hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
           >
             {saving ? <LoaderSpinner className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Profile
           </button>
@@ -199,15 +297,15 @@ export default function AdminSettingsPage() {
       {/* Scheduling Tab */}
       {activeTab === "scheduling" && (
         <div className="space-y-6">
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
-            <h3 className="text-white font-semibold mb-5">Default Appointment Duration</h3>
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+            <h3 className="text-slate-900 font-semibold mb-5 text-sm">Default Appointment Duration</h3>
             <div className="flex gap-2 flex-wrap">
               {[15, 30, 45, 60].map(d => (
                 <button
                   key={d}
                   onClick={() => setDuration(d)}
                   className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${
-                    duration === d ? "bg-[var(--teal)] text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    duration === d ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-650 hover:bg-slate-200"
                   }`}
                 >
                   {d} min
@@ -216,49 +314,49 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
-            <h3 className="text-white font-semibold mb-5">Clinic Hours</h3>
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+            <h3 className="text-slate-900 font-semibold mb-5 text-sm">Clinic Hours</h3>
             <div className="space-y-3">
               {weekdays.map((day, i) => (
                 <div key={day} className="flex items-center gap-4 flex-wrap">
                   <button
                     onClick={() => setOpenDays(prev => prev.map((v, j) => j === i ? !v : v))}
-                    className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${openDays[i] ? "bg-[var(--teal)]" : "bg-slate-700"}`}
+                    className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${openDays[i] ? "bg-teal-600" : "bg-slate-200"}`}
                   >
                     <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${openDays[i] ? "translate-x-4" : "translate-x-0"}`} />
                   </button>
-                  <span className={`w-24 text-sm font-medium ${openDays[i] ? "text-white" : "text-slate-500"}`}>{day}</span>
+                  <span className={`w-24 text-sm font-medium ${openDays[i] ? "text-slate-800" : "text-slate-400"}`}>{day}</span>
                   {openDays[i] ? (
-                    <div className="flex items-center gap-2 text-sm text-slate-300">
-                      <input type="time" defaultValue="09:00" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[var(--teal)]" />
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="time" defaultValue="09:00" className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:border-teal-500" />
                       <span>to</span>
-                      <input type="time" defaultValue="18:00" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[var(--teal)]" />
+                      <input type="time" defaultValue="18:00" className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:border-teal-500" />
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-600 uppercase font-bold tracking-wider">Closed</span>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Closed</span>
                   )}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700 grid md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm grid md:grid-cols-2 gap-8">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-4">Buffer Between Appointments</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-4">Buffer Between Appointments</label>
               <div className="flex items-center gap-4">
-                <button onClick={() => setBuffer(b => Math.max(0, b - 5))} className="w-9 h-9 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center justify-center text-white font-bold transition-colors cursor-pointer">−</button>
-                <span className="font-display text-3xl font-semibold text-white w-16 text-center">{buffer}</span>
-                <button onClick={() => setBuffer(b => b + 5)} className="w-9 h-9 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center justify-center text-white font-bold transition-colors cursor-pointer">+</button>
-                <span className="text-slate-400 text-sm">min</span>
+                <button onClick={() => setBuffer(b => Math.max(0, b - 5))} className="w-9 h-9 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-800 font-bold transition-colors cursor-pointer">−</button>
+                <span className="font-display text-3xl font-semibold text-slate-900 w-16 text-center">{buffer}</span>
+                <button onClick={() => setBuffer(b => b + 5)} className="w-9 h-9 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-800 font-bold transition-colors cursor-pointer">+</button>
+                <span className="text-slate-450 text-sm font-medium">min</span>
               </div>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-4">Advance Booking Limit</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-455 block mb-4">Advance Booking Limit</label>
               <div className="flex items-center gap-4">
-                <button onClick={() => setBookingLimit(b => Math.max(1, b - 1))} className="w-9 h-9 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center justify-center text-white font-bold transition-colors cursor-pointer">−</button>
-                <span className="font-display text-3xl font-semibold text-white w-16 text-center">{bookingLimit}</span>
-                <button onClick={() => setBookingLimit(b => Math.min(12, b + 1))} className="w-9 h-9 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center justify-center text-white font-bold transition-colors cursor-pointer">+</button>
-                <span className="text-slate-400 text-sm">weeks</span>
+                <button onClick={() => setBookingLimit(b => Math.max(1, b - 1))} className="w-9 h-9 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-800 font-bold transition-colors cursor-pointer">−</button>
+                <span className="font-display text-3xl font-semibold text-slate-900 w-16 text-center">{bookingLimit}</span>
+                <button onClick={() => setBookingLimit(b => Math.min(12, b + 1))} className="w-9 h-9 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-800 font-bold transition-colors cursor-pointer">+</button>
+                <span className="text-slate-455 text-sm font-medium">weeks</span>
               </div>
             </div>
           </div>
@@ -271,7 +369,7 @@ export default function AdminSettingsPage() {
               bookingLimit,
               openDays,
             }, "Scheduling rules synced with database!")}
-            className="flex items-center gap-2 bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-6 py-3 rounded-xl font-semibold hover:bg-[var(--teal)] hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
           >
             {saving ? <LoaderSpinner className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Scheduling Rules
           </button>
@@ -281,80 +379,45 @@ export default function AdminSettingsPage() {
       {/* Integrations Tab */}
       {activeTab === "integrations" && (
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-700 rounded-xl flex items-center justify-center">
-                <Plug className="w-5 h-5 text-[var(--teal-light)]" />
+              <div className="w-10 h-10 bg-slate-55 flex items-center justify-center rounded-xl">
+                <Plug className="w-5 h-5 text-teal-650" />
               </div>
               <div>
-                <p className="font-semibold text-white text-sm">Google Calendar</p>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--teal-light)] bg-[var(--teal-dark)] px-2 py-0.5 rounded-full">Connected</span>
+                <p className="font-semibold text-slate-900 text-sm">Google Calendar</p>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">Connected</span>
               </div>
             </div>
-            <p className="text-sm text-slate-400 mb-4">Syncs clinic bookings to your personal Google Calendar every 5 minutes.</p>
-            <button className="text-sm font-semibold text-slate-400 hover:text-red-400 transition-colors border border-slate-700 px-4 py-2 rounded-lg hover:border-red-400/30 cursor-pointer">Disconnect</button>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">Syncs clinic bookings to your personal Google Calendar every 5 minutes.</p>
+            <button className="text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors border border-slate-200 px-4 py-2 rounded-lg hover:border-red-200 cursor-pointer bg-white">Disconnect</button>
           </div>
 
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-700 rounded-xl flex items-center justify-center">
-                <span className="text-[var(--pink-light)] font-bold text-sm">₹</span>
+              <div className="w-10 h-10 bg-slate-55 flex items-center justify-center rounded-xl">
+                <span className="text-teal-600 font-bold text-sm">₹</span>
               </div>
               <div>
-                <p className="font-semibold text-white text-sm">Razorpay</p>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 bg-amber-900/30 px-2 py-0.5 rounded-full">Not Configured</span>
+                <p className="font-semibold text-slate-900 text-sm">Razorpay</p>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">Not Configured</span>
               </div>
             </div>
             <div className="relative mb-4">
               <input
                 type={showRazorKey ? "text" : "password"}
                 placeholder="rzp_live_xxxxxxxxxxxx"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-[var(--teal)] pr-11 text-sm"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 pr-11 text-xs"
               />
-              <button onClick={() => setShowRazorKey(!showRazorKey)} className="absolute right-3 top-3.5 text-slate-500 hover:text-white transition-colors cursor-pointer">
+              <button onClick={() => setShowRazorKey(!showRazorKey)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
                 {showRazorKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
             <button 
               onClick={() => handleSave({}, "Razorpay credentials synced!")}
-              className="w-full bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[var(--teal)] hover:text-white transition-colors cursor-pointer"
+              className="w-full bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Connect Razorpay
-            </button>
-          </div>
-
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-700 rounded-xl flex items-center justify-center text-green-400 font-bold text-lg">W</div>
-              <div>
-                <p className="font-semibold text-white text-sm">WhatsApp Business (WATI)</p>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-slate-700 px-2 py-0.5 rounded-full">Not Connected</span>
-              </div>
-            </div>
-            <input type="text" placeholder="WATI API Token" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-[var(--teal)] mb-4 text-sm" />
-            <button 
-              onClick={() => handleSave({}, "WhatsApp gateway details updated!")}
-              className="text-sm font-semibold text-[var(--teal-light)] border border-[var(--teal)]/30 px-4 py-2 rounded-lg hover:bg-[var(--teal-dark)] transition-colors cursor-pointer"
-            >
-              Save
-            </button>
-          </div>
-
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 opacity-60">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-700 rounded-xl flex items-center justify-center text-red-400 font-bold">T</div>
-              <div>
-                <p className="font-semibold text-white text-sm">Twilio SMS</p>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-slate-700 px-2 py-0.5 rounded-full">Not Connected</span>
-              </div>
-            </div>
-            <input type="text" placeholder="Account SID" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none mb-3 text-sm" />
-            <input type="text" placeholder="Auth Token" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none mb-4 text-sm" />
-            <button 
-              onClick={() => handleSave({}, "Twilio API configuration updated!")}
-              className="text-sm font-semibold text-[var(--teal-light)] border border-[var(--teal)]/30 px-4 py-2 rounded-lg cursor-pointer"
-            >
-              Save
             </button>
           </div>
         </div>
@@ -363,7 +426,7 @@ export default function AdminSettingsPage() {
       {/* Notifications Tab */}
       {activeTab === "notifications" && (
         <div className="space-y-6">
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700 space-y-1">
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm space-y-1">
             {[
               { key: "whatsappConfirm", label: "Send appointment confirmation via WhatsApp" },
               { key: "whatsapp24h", label: "Send 24-hour reminder via WhatsApp" },
@@ -371,11 +434,11 @@ export default function AdminSettingsPage() {
               { key: "emailInvoice", label: "Email invoice on payment" },
               { key: "newBookingAlert", label: "Alert doctor on new booking" },
             ].map(item => (
-              <div key={item.key} className="flex items-center justify-between py-4 border-b border-slate-700 last:border-0">
-                <span className="text-slate-300 text-sm font-medium">{item.label}</span>
+              <div key={item.key} className="flex items-center justify-between py-4 border-b border-slate-100 last:border-0">
+                <span className="text-slate-700 text-sm font-medium">{item.label}</span>
                 <button
                   onClick={() => setNotifications(prev => ({ ...prev, [item.key]: !prev[item.key as keyof typeof prev] }))}
-                  className={`w-12 h-7 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${notifications[item.key as keyof typeof notifications] ? "bg-[var(--teal)]" : "bg-slate-700"}`}
+                  className={`w-12 h-7 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${notifications[item.key as keyof typeof notifications] ? "bg-teal-600" : "bg-slate-200"}`}
                 >
                   <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${notifications[item.key as keyof typeof notifications] ? "translate-x-5" : "translate-x-0"}`} />
                 </button>
@@ -383,13 +446,13 @@ export default function AdminSettingsPage() {
             ))}
           </div>
 
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-4">WhatsApp Message Template</label>
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-4">WhatsApp Message Template</label>
             <textarea
               rows={5}
               value={whatsappTemplate}
               onChange={(e) => setWhatsappTemplate(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-300 focus:outline-none focus:border-[var(--teal)] transition-colors resize-none text-sm font-mono"
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-teal-500 transition-colors resize-none text-xs font-mono"
             />
             <button 
               disabled={saving}
@@ -397,11 +460,158 @@ export default function AdminSettingsPage() {
                 ...notifications,
                 whatsappTemplate,
               }, "Notification preferences saved successfully!")}
-              className="mt-4 flex items-center gap-2 bg-[var(--teal-dark)] text-[var(--teal-light)] border border-[var(--teal)]/30 px-6 py-3 rounded-xl font-semibold hover:bg-[var(--teal)] hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              className="mt-4 flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
             >
               {saving ? <LoaderSpinner className="w-4 h-4" /> : <Check className="w-4 h-4" />} Save Template & Settings
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Reusable Templates Manager Tab */}
+      {activeTab === "templates" && (
+        <div className="space-y-6">
+          {isCreatingNew ? (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+              <h3 className="text-slate-950 font-semibold mb-6 text-base">{editingTemplate ? "Edit Safety Template" : "Create Custom Form Template"}</h3>
+              <form onSubmit={handleSaveTemplate} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Template Title</label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. Botox Injection Consent Waiver"
+                    value={templateForm.title}
+                    onChange={(e) => setTemplateForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-850 placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-450 block mb-2">Category</label>
+                    <select
+                      value={templateForm.category}
+                      onChange={(e) => setTemplateForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-teal-500 transition-colors text-sm"
+                    >
+                      <option value="CONSENT">Consent Form</option>
+                      <option value="HISTORY">Medical History Form</option>
+                      <option value="QUESTIONNAIRE">Pre-Treatment Questionnaire</option>
+                      <option value="FOLLOW_UP">Post-Treatment Follow-up</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-2 bg-slate-50/50">
+                    <span className="text-xs text-slate-650 font-medium">Mandatory Check-in Requirement</span>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm(prev => ({ ...prev, isMandatory: !prev.isMandatory }))}
+                      className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${templateForm.isMandatory ? "bg-teal-600" : "bg-slate-200"}`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${templateForm.isMandatory ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-455 block mb-2">Template Content</label>
+                  <textarea
+                    required
+                    rows={8}
+                    placeholder="Enter the document body contents, liability waivers, or standard questionnaire prompts..."
+                    value={templateForm.content}
+                    onChange={(e) => setTemplateForm(prev => ({ ...prev, content: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-850 focus:outline-none focus:border-teal-500 transition-colors text-sm resize-none font-sans"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    {saving ? <LoaderSpinner className="w-3 h-3" /> : <Save className="w-3.5 h-3.5" />} Save Template
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNew(false);
+                      setEditingTemplate(null);
+                      setTemplateForm({ title: "", content: "", category: "CONSENT", isMandatory: true });
+                    }}
+                    className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-slate-900 font-semibold text-base">Custom Safety Form Templates</h3>
+                <button
+                  onClick={() => setIsCreatingNew(true)}
+                  className="flex items-center gap-1.5 bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-teal-700 transition-colors shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Create Custom Template
+                </button>
+              </div>
+
+              <div className="grid gap-4">
+                {templates.length === 0 ? (
+                  <div className="bg-white border border-slate-100 rounded-3xl p-8 text-center text-slate-450 text-xs italic">
+                    No custom templates configured. Set up templates to request signatures during check-in.
+                  </div>
+                ) : (
+                  templates.map(temp => (
+                    <div 
+                      key={temp.id} 
+                      className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:border-slate-200 transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-slate-900 text-sm">{temp.title}</h4>
+                          <span className="text-[8px] font-bold uppercase bg-slate-50 text-slate-650 px-2 py-0.5 rounded-full border border-slate-100">
+                            {temp.category}
+                          </span>
+                          {temp.isMandatory && (
+                            <span className="text-[8px] font-bold uppercase bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-100">
+                              Mandatory
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 line-clamp-2 pr-6 leading-relaxed">{temp.content}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => startEdit(temp)}
+                          className="bg-white border border-slate-200 text-slate-700 p-2 rounded-lg hover:bg-slate-50 hover:text-slate-950 transition-colors"
+                          title="Edit Template"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDuplicate(temp.id)}
+                          className="bg-white border border-slate-200 text-slate-700 p-2 rounded-lg hover:bg-slate-50 hover:text-slate-950 transition-colors"
+                          title="Duplicate Template"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleArchive(temp.id)}
+                          className="bg-white border border-slate-200 text-red-650 p-2 rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors"
+                          title="Archive Template"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

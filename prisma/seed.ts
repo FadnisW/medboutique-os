@@ -12,6 +12,8 @@ async function main() {
   await prisma.auditLog.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.patientRecord.deleteMany();
+  await prisma.safetyFormInstance.deleteMany();
+  await prisma.patientStatusLog.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.availabilitySlot.deleteMany();
   await prisma.invoice.deleteMany();
@@ -21,6 +23,8 @@ async function main() {
   await prisma.doctorProfile.deleteMany();
   await prisma.staffProfile.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.clinicStatus.deleteMany();
+  await prisma.safetyFormTemplate.deleteMany();
 
   console.log("🧹 Database cleared.");
 
@@ -30,7 +34,49 @@ async function main() {
   const staffPasswordHash = await bcrypt.hash("staff123", salt);
   const patientPasswordHash = await bcrypt.hash("patient123", salt);
 
-  // 1. Create Doctor User & Profile
+  // 1. Create Clinic Statuses
+  console.log("📍 Seeding Clinic Statuses...");
+  const checkedInStatus = await prisma.clinicStatus.create({
+    data: { name: "Checked In", sortOrder: 1 }
+  });
+  const waitingLoungeStatus = await prisma.clinicStatus.create({
+    data: { name: "Waiting Lounge", sortOrder: 2 }
+  });
+  const treatmentRoomStatus = await prisma.clinicStatus.create({
+    data: { name: "Treatment Room A", sortOrder: 3 }
+  });
+  const checkOutStatus = await prisma.clinicStatus.create({
+    data: { name: "Check-out", sortOrder: 4 }
+  });
+
+  // 2. Create Safety Form Templates
+  console.log("📄 Seeding Safety Form Templates...");
+  const botoxTemplate = await prisma.safetyFormTemplate.create({
+    data: {
+      title: "Botox Treatment Consent",
+      content: "I hereby consent to receive Botox injections. I understand the risks include localized swelling, redness, and temporary muscle weakness...",
+      category: "CONSENT",
+      isMandatory: true
+    }
+  });
+  const laserTemplate = await prisma.safetyFormTemplate.create({
+    data: {
+      title: "Laser Resurfacing Consent",
+      content: "I hereby consent to undergo Laser skin resurfacing. I understand that the treatment carries risks of temporary hyperpigmentation, minor scarring, and mild blistering...",
+      category: "CONSENT",
+      isMandatory: true
+    }
+  });
+  const historyTemplate = await prisma.safetyFormTemplate.create({
+    data: {
+      title: "Aesthetic Medical History",
+      content: "Please list any pre-existing medical conditions, current medications, skincare routines, and allergies...",
+      category: "HISTORY",
+      isMandatory: true
+    }
+  });
+
+  // 3. Create Doctor User & Profile
   console.log("👤 Creating Doctor user and profile...");
   const doctorUser = await prisma.user.create({
     data: {
@@ -47,11 +93,16 @@ async function main() {
         },
       },
     },
+    include: {
+      doctorProfile: true
+    }
   });
 
-  // 2. Create Staff User & Profile
+  const doctorProfileId = doctorUser.doctorProfile!.id;
+
+  // 4. Create Staff User & Profile
   console.log("👤 Creating Staff user and profile...");
-  await prisma.user.create({
+  const staffUser = await prisma.user.create({
     data: {
       email: "receptionist@medboutique.com",
       name: "Simran Kapur",
@@ -66,7 +117,7 @@ async function main() {
     },
   });
 
-  // 3. Create Patient User & Profile
+  // 5. Create Patient User & Profile (Eleanor Vance)
   console.log("👤 Creating Patient user and profile...");
   const patientUser = await prisma.user.create({
     data: {
@@ -104,34 +155,6 @@ async function main() {
                     completed: true,
                   },
                   {
-                    title: "Moisturiser (La Roche-Posay)",
-                    instruction: "Pat gently — do not rub. Focus on dry zones.",
-                    timeOfDay: "MORNING",
-                    scheduledTime: "08:10 AM",
-                    completed: false,
-                  },
-                  {
-                    title: "SPF 50 Sunscreen",
-                    instruction: "2 finger-length rule. Reapply every 2 hours outdoors.",
-                    timeOfDay: "MORNING",
-                    scheduledTime: "08:15 AM",
-                    completed: false,
-                  },
-                  {
-                    title: "Micellar Water Cleanse",
-                    instruction: "Use cotton pads to remove SPF and makeup.",
-                    timeOfDay: "EVENING",
-                    scheduledTime: "09:00 PM",
-                    completed: false,
-                  },
-                  {
-                    title: "Gentle Foaming Cleanser",
-                    instruction: "Double cleanse to remove all residue.",
-                    timeOfDay: "EVENING",
-                    scheduledTime: "09:05 PM",
-                    completed: false,
-                  },
-                  {
                     title: "Peptide Night Cream",
                     instruction: "Apply on clean, damp skin. No retinol for 72 hrs post-treatment.",
                     timeOfDay: "EVENING",
@@ -145,6 +168,182 @@ async function main() {
         },
       },
     },
+    include: {
+      patientProfile: true
+    }
+  });
+
+  const patientProfileId = patientUser.patientProfile!.id;
+
+  // Create another patient (Aria Sen)
+  const ariaUser = await prisma.user.create({
+    data: {
+      email: "aria.sen@example.com",
+      name: "Aria Sen",
+      passwordHash: patientPasswordHash,
+      role: Role.PATIENT,
+      phone: "+919876543213",
+      patientProfile: {
+        create: {
+          dob: new Date("1992-09-20"),
+          gender: "Female",
+          bloodGroup: "A+",
+          medicalHistory: "None.",
+          address: "12 Juhu Tara Road, Juhu, Mumbai",
+        }
+      }
+    },
+    include: {
+      patientProfile: true
+    }
+  });
+
+  const ariaProfileId = ariaUser.patientProfile!.id;
+
+  // 6. Create Availability Slots for Today
+  console.log("📅 Seeding Availability Slots and Appointments for Today...");
+  const now = new Date();
+  
+  // Slot 1: 10:00 AM (already in the past)
+  const startTime1 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0, 0, 0);
+  const endTime1 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 11, 0, 0, 0);
+  const slot1 = await prisma.availabilitySlot.create({
+    data: {
+      doctorId: doctorProfileId,
+      startTime: startTime1,
+      endTime: endTime1,
+      isBooked: true
+    }
+  });
+
+  // Slot 2: 11:30 AM (also in the past relative to current run time of 9pm)
+  const startTime2 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 11, 30, 0, 0);
+  const endTime2 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 30, 0, 0);
+  const slot2 = await prisma.availabilitySlot.create({
+    data: {
+      doctorId: doctorProfileId,
+      startTime: startTime2,
+      endTime: endTime2,
+      isBooked: true
+    }
+  });
+
+  // Slot 3: Future slot (for testing flow logic)
+  const startTime3 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 0, 0, 0);
+  const endTime3 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 30, 0, 0);
+  const slot3 = await prisma.availabilitySlot.create({
+    data: {
+      doctorId: doctorProfileId,
+      startTime: startTime3,
+      endTime: endTime3,
+      isBooked: true
+    }
+  });
+
+  // 7. Create Appointments for Today
+  // Eleanor Vance's appointment 1: COMPLETED (should NOT show in active clinic flow)
+  const appt1 = await prisma.appointment.create({
+    data: {
+      patientId: patientProfileId,
+      doctorId: doctorProfileId,
+      slotId: slot1.id,
+      status: "COMPLETED",
+      reason: "Botox injection treatment plan follow-up",
+      notes: "Patient barrier looks healthy. Retinol restricted."
+    }
+  });
+
+  // Aria Sen's appointment 2: CONFIRMED (time has arrived -> should show in active clinic flow)
+  const appt2 = await prisma.appointment.create({
+    data: {
+      patientId: ariaProfileId,
+      doctorId: doctorProfileId,
+      slotId: slot2.id,
+      status: "CONFIRMED",
+      reason: "Laser Resurfacing initial consult"
+    }
+  });
+
+  // Future appointment (time has NOT arrived -> should NOT show in active clinic flow)
+  const futureAppt = await prisma.appointment.create({
+    data: {
+      patientId: patientProfileId,
+      doctorId: doctorProfileId,
+      slotId: slot3.id,
+      status: "CONFIRMED",
+      reason: "Quick follow-up consult"
+    }
+  });
+
+  // 8. Create Patient Status Log for Aria Sen (in Wait lounge)
+  await prisma.patientStatusLog.create({
+    data: {
+      appointmentId: appt2.id,
+      statusId: waitingLoungeStatus.id,
+      updatedById: staffUser.id
+    }
+  });
+
+  // 9. Create Safety Form Instances
+  // Eleanor Vance had completed Botox consent and Medical history
+  await prisma.safetyFormInstance.create({
+    data: {
+      patientId: patientProfileId,
+      templateId: botoxTemplate.id,
+      appointmentId: appt1.id,
+      status: "COMPLETED",
+      isSigned: true,
+      sentAt: new Date(now.getTime() - 3600000), // 1 hour ago
+      sentById: doctorUser.id,
+      viewedAt: new Date(now.getTime() - 3000000),
+      completedAt: new Date(now.getTime() - 2500000)
+    }
+  });
+
+  await prisma.safetyFormInstance.create({
+    data: {
+      patientId: patientProfileId,
+      templateId: historyTemplate.id,
+      appointmentId: appt1.id,
+      status: "COMPLETED",
+      isSigned: true,
+      sentAt: new Date(now.getTime() - 3600000),
+      sentById: doctorUser.id,
+      viewedAt: new Date(now.getTime() - 3200000),
+      completedAt: new Date(now.getTime() - 2800000)
+    }
+  });
+
+  // Aria Sen has NOT completed Laser Resurfacing consent (only VIEWED)
+  await prisma.safetyFormInstance.create({
+    data: {
+      patientId: ariaProfileId,
+      templateId: laserTemplate.id,
+      appointmentId: appt2.id,
+      status: "VIEWED",
+      isSigned: false,
+      sentAt: new Date(now.getTime() - 1800000), // 30 mins ago
+      sentById: staffUser.id,
+      viewedAt: new Date(now.getTime() - 600000) // 10 mins ago
+    }
+  });
+
+  // 10. Seed conversations and messages for Inbox
+  console.log("💬 Seeding Conversation & Messages...");
+  const convo = await prisma.conversation.create({
+    data: {
+      patientId: patientProfileId,
+      doctorId: doctorProfileId
+    }
+  });
+
+  await prisma.message.create({
+    data: {
+      conversationId: convo.id,
+      senderId: patientUser.id,
+      content: "Hello Dr. Aisha, I am experiencing slight redness after using the morning serum. Is this normal?",
+      isRead: false
+    }
   });
 
   console.log("✅ Seeding completed successfully!");
