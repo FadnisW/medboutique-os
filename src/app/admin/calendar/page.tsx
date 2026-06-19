@@ -39,12 +39,12 @@ for (let h = 7; h <= 20; h++) {
 }
 
 const typeStyles = {
-  CONFIRMED: "bg-emerald-955/60 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-950/60 shadow-sm shadow-emerald-950/50",
-  PENDING_PAYMENT: "bg-amber-955/60 text-amber-300 border border-amber-800/80 hover:bg-amber-950/60 shadow-sm shadow-amber-950/50",
-  CANCELLED: "bg-rose-955/20 text-rose-400 border border-rose-900/40 line-through opacity-60 hover:bg-rose-955/30",
-  COMPLETED: "bg-slate-900/80 text-slate-400 border border-slate-800/80 line-through opacity-65 hover:bg-slate-900",
-  NO_SHOW: "bg-purple-955/20 text-purple-300 border border-purple-900/40 hover:bg-purple-955/30",
-  FREE: "bg-slate-950/30 text-slate-400 border border-dashed border-slate-800 hover:border-[var(--teal)]/50 hover:bg-[var(--teal-dark)]/10 hover:text-[var(--teal-light)] transition-all",
+  CONFIRMED: "bg-[var(--teal)] text-slate-950 font-bold border-l-4 border-emerald-300 shadow-md hover:brightness-110 transition-all",
+  PENDING_PAYMENT: "bg-amber-400 text-slate-950 font-bold border-l-4 border-amber-600 shadow-md hover:brightness-110 transition-all",
+  CANCELLED: "bg-rose-950/80 text-rose-200 border-l-4 border-rose-600 line-through opacity-80 hover:brightness-110 transition-all",
+  COMPLETED: "bg-slate-800 text-slate-350 border-l-4 border-slate-500 line-through opacity-85 hover:brightness-110 transition-all",
+  NO_SHOW: "bg-purple-950/80 text-purple-300 border-l-4 border-purple-650 hover:brightness-110 transition-all",
+  FREE: "bg-slate-900/40 text-slate-400 border border-dashed border-slate-700/80 hover:border-[var(--teal)] hover:bg-slate-850 hover:text-white transition-all",
 };
 
 const badgeStyles = {
@@ -683,23 +683,23 @@ export default function AdminCalendarPage() {
           <div className="flex flex-wrap gap-4 mt-4 text-xs font-semibold text-slate-400 bg-slate-900/40 backdrop-blur-md p-4 rounded-2xl border border-slate-800/80 max-w-max">
             <span className="text-slate-500 uppercase text-[9px] font-extrabold tracking-widest self-center mr-1">Legend:</span>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <div className="w-3.5 h-4 rounded bg-[var(--teal)] border-l-2 border-emerald-300" />
               <span>Confirmed</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <div className="w-3.5 h-4 rounded bg-amber-400 border-l-2 border-amber-600" />
               <span>Pending Payment</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-500" />
+              <div className="w-3.5 h-4 rounded bg-slate-800 border-l-2 border-slate-500 line-through" />
               <span>Completed</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+              <div className="w-3.5 h-4 rounded bg-rose-950/80 border-l-2 border-rose-600 line-through" />
               <span>Cancelled</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full border border-dashed border-slate-600" />
+              <div className="w-3.5 h-4 rounded bg-slate-900/40 border border-dashed border-slate-700/80" />
               <span>Available Slot</span>
             </div>
           </div>
