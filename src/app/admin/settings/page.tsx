@@ -481,29 +481,44 @@ export default function AdminSettingsPage() {
 
           <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-55 flex items-center justify-center rounded-xl">
-                <span className="text-teal-600 font-bold text-sm">₹</span>
+              <div className="w-10 h-10 bg-slate-50 flex items-center justify-center rounded-xl">
+                <span className="text-teal-600 font-bold text-sm">S</span>
               </div>
               <div>
-                <p className="font-semibold text-slate-900 text-sm">Razorpay</p>
-                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">Not Configured</span>
+                <p className="font-semibold text-slate-900 text-sm">Stripe</p>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">Connected</span>
               </div>
             </div>
-            <div className="relative mb-4">
-              <input
-                type={showRazorKey ? "text" : "password"}
-                placeholder="rzp_live_xxxxxxxxxxxx"
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 pr-11 text-xs"
-              />
-              <button onClick={() => setShowRazorKey(!showRazorKey)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
-                {showRazorKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">Publishable Key</label>
+                <input
+                  readOnly
+                  type="text"
+                  value="pk_test_51...Y9iFq"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 text-xs focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">Secret Key</label>
+                <div className="relative">
+                  <input
+                    readOnly
+                    type={showRazorKey ? "text" : "password"}
+                    value="sk_test_51...Lttpr"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 text-xs pr-11 focus:outline-none"
+                  />
+                  <button onClick={() => setShowRazorKey(!showRazorKey)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
+                    {showRazorKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
             <button 
-              onClick={() => handleSave({}, "Razorpay credentials synced!")}
+              onClick={() => handleSave({}, "Stripe credentials synced successfully!")}
               className="w-full bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Connect Razorpay
+              Sync Stripe Configuration
             </button>
           </div>
         </div>

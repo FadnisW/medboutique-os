@@ -418,6 +418,12 @@ export default function AdminDashboard() {
                     <ShieldAlert className="w-5 h-5 text-amber-500" />
                     <h3 className="text-slate-900 font-semibold text-base">Safety Form Audits</h3>
                   </div>
+                  <Link
+                    href="/admin/forms"
+                    className="text-[10px] font-bold uppercase tracking-wider text-teal-600 hover:text-teal-700 transition-colors"
+                  >
+                    View All Records →
+                  </Link>
                 </div>
 
                 <div className="mb-6 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">

@@ -393,3 +393,19 @@ html {
     @apply font-sans;
   }
 }
+
+/* ── Custom Animations ─────────────────────────────────────────── */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}

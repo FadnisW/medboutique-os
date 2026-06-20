@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, CalendarDays, Users, FileText, Receipt, Settings, LogOut, Plus, MessageSquare } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Users, FileText, Receipt, Settings, LogOut, Plus, MessageSquare, Shield } from "lucide-react";
 import { logoutAction, getSessionUser } from "@/app/actions/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -33,6 +33,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Patients", href: "/admin/patients", icon: Users },
     { name: "Clinical Notes", href: "/admin/patients/notes", icon: FileText },
     { name: "Messages", href: "/admin/messages", icon: MessageSquare },
+    { name: "Forms & Consents", href: "/admin/forms", icon: Shield },
     { name: "Billing", href: "/admin/billing", icon: Receipt },
   ];
 

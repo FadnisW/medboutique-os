@@ -173,3 +173,166 @@ export async function getFormInstancesForAppointment(appointmentId: string) {
     return { success: false, error: "Failed to retrieve form instances" };
   }
 }
+
+export async function getFormInstanceDetails(instanceId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
+    const instance = await db.safetyFormInstance.findUnique({
+      where: { id: instanceId },
+      include: {
+        template: true,
+        patient: {
+          include: {
+            user: true
+          }
+        },
+        appointment: {
+          include: {
+            slot: true
+          }
+        }
+      }
+    });
+
+    if (!instance) {
+      return { success: false, error: "Form instance not found" };
+    }
+
+    return {
+      success: true,
+      instance: {
+        id: instance.id,
+        status: instance.status,
+        sentAt: instance.sentAt.toISOString(),
+        viewedAt: instance.viewedAt?.toISOString() || null,
+        completedAt: instance.completedAt?.toISOString() || null,
+        expiresAt: instance.expiresAt?.toISOString() || null,
+        isSigned: instance.isSigned,
+        signatureUrl: instance.signatureUrl,
+        responseJson: instance.responseJson,
+        templateTitle: instance.template.title,
+        templateContent: instance.template.content,
+        patientName: instance.patient.user.name,
+        patientEmail: instance.patient.user.email,
+        appointmentReason: instance.appointment.reason,
+        appointmentDate: instance.appointment.slot.startTime.toISOString(),
+      }
+    };
+  } catch (error) {
+    console.error("Error in getFormInstanceDetails:", error);
+    return { success: false, error: "Failed to retrieve form details" };
+  }
+}
+
+export async function getAllFormInstances(options?: {
+  status?: string;
+  templateId?: string;
+  search?: string;
+}) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (session.user.role !== "DOCTOR" && session.user.role !== "RECEPTIONIST") {
+      return { success: false, error: "Forbidden" };
+    }
+
+    const whereClause: any = {};
+
+    if (options?.status && options.status !== "ALL") {
+      whereClause.status = options.status;
+    }
+    if (options?.templateId && options.templateId !== "ALL") {
+      whereClause.templateId = options.templateId;
+    }
+
+    const instances = await db.safetyFormInstance.findMany({
+      where: whereClause,
+      orderBy: { sentAt: "desc" },
+      include: {
+        template: {
+          select: { id: true, title: true, category: true, isMandatory: true }
+        },
+        patient: {
+          include: {
+            user: { select: { name: true, email: true, phone: true } }
+          }
+        },
+        appointment: {
+          include: {
+            slot: { select: { startTime: true, endTime: true } },
+            treatment: { select: { name: true } }
+          }
+        },
+        sentBy: {
+          select: { name: true, role: true }
+        }
+      }
+    });
+
+    // If there's a search term, filter in memory (name/email search)
+    let filtered = instances;
+    if (options?.search) {
+      const q = options.search.toLowerCase();
+      filtered = instances.filter(i =>
+        i.patient.user.name?.toLowerCase().includes(q) ||
+        i.patient.user.email?.toLowerCase().includes(q) ||
+        i.template.title.toLowerCase().includes(q)
+      );
+    }
+
+    const serialized = filtered.map(i => ({
+      id: i.id,
+      status: i.status,
+      isSigned: i.isSigned,
+      sentAt: i.sentAt.toISOString(),
+      viewedAt: i.viewedAt?.toISOString() || null,
+      completedAt: i.completedAt?.toISOString() || null,
+      expiresAt: i.expiresAt?.toISOString() || null,
+      signatureUrl: i.signatureUrl || null,
+      responseJson: i.responseJson || null,
+      templateId: i.templateId,
+      templateTitle: i.template.title,
+      templateCategory: i.template.category,
+      isMandatory: i.template.isMandatory,
+      patientName: i.patient.user.name || "Unknown",
+      patientEmail: i.patient.user.email,
+      patientPhone: i.patient.user.phone || null,
+      appointmentDate: i.appointment.slot.startTime.toISOString(),
+      appointmentReason: i.appointment.reason || null,
+      treatmentName: i.appointment.treatment?.name || null,
+      sentByName: i.sentBy?.name || null,
+      sentByRole: i.sentBy?.role || null,
+    }));
+
+    // Summary stats
+    const total = serialized.length;
+    const signed = serialized.filter(i => i.isSigned).length;
+    const pending = serialized.filter(i => i.status === "SENT" || i.status === "VIEWED").length;
+    const expired = serialized.filter(i => i.status === "EXPIRED").length;
+
+    // Also get all templates for filter dropdown
+    const templates = await db.safetyFormTemplate.findMany({
+      where: { isArchived: false },
+      select: { id: true, title: true }
+    });
+
+    return {
+      success: true,
+      instances: serialized,
+      stats: { total, signed, pending, expired },
+      templates,
+    };
+  } catch (error) {
+    console.error("Error in getAllFormInstances:", error);
+    return { success: false, error: "Failed to retrieve form instances" };
+  }
+}

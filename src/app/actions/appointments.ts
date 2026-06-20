@@ -5,6 +5,10 @@ import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { AppointmentStatus } from "@prisma/client";
 import crypto from "crypto";
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+
 
 /**
  * Gets all appointments for the logged-in patient.
@@ -507,12 +511,29 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
           });
         }
 
+        let clientSecret = "";
+        if (paymentAmount > 0) {
+          // Stripe requires a minimum charge amount corresponding to 50 USD cents (~₹40-50 in INR)
+          const stripeAmount = Math.max(Math.round(paymentAmount * 100), 5000);
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: stripeAmount,
+            currency: "inr",
+            metadata: {
+              appointmentId: updated.id,
+              patientId: patient.id,
+              treatmentId: treatmentId,
+            },
+          });
+          clientSecret = paymentIntent.client_secret || "";
+        }
+
         return {
           success: true,
           appointmentId: updated.id,
           amount: paymentAmount,
           currency: "INR",
-          razorpayKeyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mockKey123",
+          stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
+          clientSecret,
           status: AppointmentStatus.PENDING_PAYMENT,
         };
       }
@@ -586,12 +607,29 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
     revalidatePath("/portal/dashboard");
     revalidatePath("/admin/calendar");
 
+    let clientSecret = "";
+    if (paymentAmount > 0 && finalStatus === AppointmentStatus.PENDING_PAYMENT) {
+      // Stripe requires a minimum charge amount corresponding to 50 USD cents (~₹40-50 in INR)
+      const stripeAmount = Math.max(Math.round(paymentAmount * 100), 5000);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: stripeAmount,
+        currency: "inr",
+        metadata: {
+          appointmentId: appointment.id,
+          patientId: patient.id,
+          treatmentId: treatmentId,
+        },
+      });
+      clientSecret = paymentIntent.client_secret || "";
+    }
+
     return {
       success: true,
       appointmentId: appointment.id,
       amount: paymentAmount,
       currency: "INR",
-      razorpayKeyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mockKey123",
+      stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
+      clientSecret,
       status: finalStatus,
     };
   } catch (error) {
@@ -600,10 +638,8 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
   }
 }
 
-export async function verifyRazorpayPayment(payload: {
-  razorpay_payment_id: string;
-  razorpay_order_id?: string;
-  razorpay_signature?: string;
+export async function verifyStripePayment(payload: {
+  paymentIntentId: string;
   appointmentId: string;
 }) {
   try {
@@ -612,7 +648,7 @@ export async function verifyRazorpayPayment(payload: {
       return { success: false, error: "Unauthorized" };
     }
 
-    const { appointmentId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = payload;
+    const { appointmentId, paymentIntentId } = payload;
 
     const appointment = await db.appointment.findUnique({
       where: { id: appointmentId },
@@ -639,43 +675,41 @@ export async function verifyRazorpayPayment(payload: {
       return { success: false, error: "Associated treatment configuration not found" };
     }
 
-    // Verify Razorpay signature if credentials exist and it is not a mock transaction
-    const isMock = razorpay_payment_id.startsWith("pay_mock_");
-    if (!isMock && razorpay_order_id && razorpay_signature) {
-      const secret = process.env.RAZORPAY_KEY_SECRET;
-      if (secret) {
-        const generated = crypto
-          .createHmac("sha256", secret)
-          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-          .digest("hex");
+    // Verify payment status with Stripe directly (robust server-side check)
+    const isMock = paymentIntentId.startsWith("pay_mock_");
+    let paidAmount = 0;
 
-        if (generated !== razorpay_signature) {
-          return { success: false, error: "Razorpay payment signature validation failed" };
+    if (isMock) {
+      const priceNum = Number(treatment.price);
+      const depositNum = treatment.depositAmount ? Number(treatment.depositAmount) : 0;
+      if (priceNum > 0) {
+        if (treatment.fullPaymentRequired) {
+          paidAmount = priceNum;
+        } else if (depositNum > 0) {
+          paidAmount = depositNum;
+        } else {
+          paidAmount = priceNum;
         }
       }
-    }
-
-    // Compute server-controlled amount
-    let paidAmount = 0;
-    const priceNum = Number(treatment.price);
-    const depositNum = treatment.depositAmount ? Number(treatment.depositAmount) : 0;
-
-    if (priceNum > 0) {
-      if (treatment.fullPaymentRequired) {
-        paidAmount = priceNum;
-      } else if (depositNum > 0) {
-        paidAmount = depositNum;
-      } else {
-        paidAmount = priceNum;
+    } else {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (paymentIntent.status !== "succeeded") {
+        return { success: false, error: "Stripe payment has not succeeded yet" };
       }
+      if (paymentIntent.metadata.appointmentId !== appointmentId) {
+        return { success: false, error: "Stripe PaymentIntent metadata mismatch" };
+      }
+      paidAmount = Number(paymentIntent.amount) / 100;
     }
+
+    const priceNum = Number(treatment.price);
 
     // Record the payment
     const payment = await db.payment.create({
       data: {
         amount: paidAmount,
         currency: "INR",
-        gatewayReference: razorpay_payment_id,
+        gatewayReference: paymentIntentId,
         status: "SUCCESS",
       },
     });
@@ -765,7 +799,7 @@ export async function verifyRazorpayPayment(payload: {
       invoiceId: invoice.id,
     };
   } catch (error) {
-    console.error("Error in verifyRazorpayPayment:", error);
+    console.error("Error in verifyStripePayment:", error);
     return { success: false, error: "Payment verification failed on the server" };
   }
 }

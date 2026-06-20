@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useRef, Suspense } from "react";
+import { useState, useEffect, useTransition, useRef, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { 
@@ -22,10 +22,13 @@ import {
 } from "lucide-react";
 import { format, isSameDay, isBefore, startOfDay, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval } from "date-fns";
 
-import { getPublicAvailableSlots, initializePatientBooking, verifyRazorpayPayment, getAppointmentConfirmationDetails } from "@/app/actions/appointments";
+import { getPublicAvailableSlots, initializePatientBooking, verifyStripePayment, getAppointmentConfirmationDetails } from "@/app/actions/appointments";
 import { getTreatments } from "@/app/actions/treatments";
 import { getFormTemplates } from "@/app/actions/templates";
 import { completeSafetyForm, getFormInstancesForAppointment } from "@/app/actions/forms";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
 
 type Step = "slot" | "treatment" | "details" | "payment" | "processing" | "compliance" | "confirmation";
 
@@ -79,7 +82,8 @@ function BookingPortalContent() {
   // Booking Flow States
   const [appointmentId, setAppointmentId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
-  const [razorpayKey, setRazorpayKey] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [currentFormIndex, setCurrentFormIndex] = useState(0);
   const [signatureText, setSignatureText] = useState("");
@@ -158,7 +162,8 @@ function BookingPortalContent() {
       if (res.success && res.appointmentId) {
         setAppointmentId(res.appointmentId);
         setPaymentAmount(res.amount);
-        setRazorpayKey(res.razorpayKeyId);
+        setClientSecret(res.clientSecret || "");
+        setStripePublishableKey(res.stripePublishableKey || "");
         
         if (res.amount > 0) {
           setStep("payment");
@@ -181,23 +186,16 @@ function BookingPortalContent() {
     });
   };
 
-  // Submit Mock Razorpay Payment
-  const handleVerifyPayment = (mockSuccess = true) => {
+  // Submit Stripe Payment
+  const handleVerifyPayment = (paymentIntentId: string) => {
     if (!appointmentId) return;
     setStep("processing");
     setPaymentError(null);
 
-    setTimeout(async () => {
-      if (!mockSuccess) {
-        setPaymentError("Payment was cancelled or failed verification.");
-        setStep("payment");
-        return;
-      }
-
-      const paymentId = `pay_mock_${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
-      const res = await verifyRazorpayPayment({
+    startTransition(async () => {
+      const res = await verifyStripePayment({
         appointmentId,
-        razorpay_payment_id: paymentId,
+        paymentIntentId,
       });
 
       if (res.success) {
@@ -214,7 +212,7 @@ function BookingPortalContent() {
         setPaymentError(res.error || "Payment verification failed on server");
         setStep("payment");
       }
-    }, 2000);
+    });
   };
 
   // Submit Compliance Consent Forms
@@ -560,23 +558,24 @@ function BookingPortalContent() {
             )}
           </div>
 
-          <div className="space-y-3 pt-2">
-            <button
-              onClick={() => handleVerifyPayment(true)}
-              className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 text-sm flex items-center justify-center gap-2 shadow-sm"
-            >
-              Simulate Secure Success Payment
-            </button>
-            <button
-              onClick={() => handleVerifyPayment(false)}
-              className="w-full bg-white border border-slate-200 text-slate-600 py-3 rounded-xl font-semibold hover:bg-slate-50 text-sm"
-            >
-              Simulate Payment Failure
-            </button>
-          </div>
+          {clientSecret && stripePublishableKey ? (
+            <StripePaymentFormWrapper
+              clientSecret={clientSecret}
+              stripePublishableKey={stripePublishableKey}
+              appointmentId={appointmentId || ""}
+              amount={paymentAmount}
+              onSuccess={handleVerifyPayment}
+              onCancel={() => setStep("details")}
+            />
+          ) : (
+            <div className="text-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-[var(--teal)] mx-auto mb-2" />
+              <p className="text-xs text-slate-500">Initializing secure payment components...</p>
+            </div>
+          )}
 
           <p className="text-center text-[10px] text-slate-400">
-            Powered by Razorpay Secure SmartCheckout. SSL 256-bit Encrypted.
+            Powered by Stripe Secure Elements. SSL 256-bit Encrypted.
           </p>
         </div>
       )}
@@ -738,3 +737,131 @@ export default function PortalBookPage() {
     </Suspense>
   );
 }
+
+interface StripePaymentFormProps {
+  clientSecret: string;
+  stripePublishableKey: string;
+  appointmentId: string;
+  amount: number;
+  onSuccess: (paymentIntentId: string) => void;
+  onCancel: () => void;
+}
+
+function StripeCheckoutForm({ clientSecret, appointmentId, amount, onSuccess, onCancel }: Omit<StripePaymentFormProps, "stripePublishableKey">) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+    setErrorMessage(null);
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+
+    if (error) {
+      setErrorMessage(error.message || "An unexpected error occurred.");
+      setIsProcessing(false);
+    } else if (paymentIntent && paymentIntent.status === "succeeded") {
+      onSuccess(paymentIntent.id);
+    } else {
+      setErrorMessage("Payment verification pending or failed.");
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <PaymentElement />
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-100 text-red-650 rounded-xl p-3 text-xs flex gap-2">
+          <AlertCircle className="w-4.5 h-4.5 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+      
+      {/* Simulation options for development/testing */}
+      <div className="border-t border-dashed border-slate-200 pt-4 mt-4 space-y-2">
+        <p className="text-[10px] text-slate-400 font-medium">Testing options (Simulate):</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onSuccess(`pay_mock_${Math.random().toString(36).substring(2, 11).toUpperCase()}`)}
+            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 rounded-lg text-[10px] font-semibold transition-colors"
+          >
+            Simulate Mock Success
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 bg-white border border-slate-200 text-slate-650 py-3 rounded-xl font-semibold hover:bg-slate-50 text-sm transition-colors cursor-pointer"
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          disabled={!stripe || isProcessing}
+          className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 transition-colors cursor-pointer"
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" /> Verifying...
+            </>
+          ) : (
+            `Pay ₹${amount.toLocaleString("en-IN")}`
+          )}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function StripePaymentFormWrapper({ clientSecret, stripePublishableKey, appointmentId, amount, onSuccess, onCancel }: StripePaymentFormProps) {
+  const stripePromise = useMemo(() => loadStripe(stripePublishableKey), [stripePublishableKey]);
+
+  const appearance = {
+    theme: 'flat' as const,
+    variables: {
+      colorPrimary: '#0d9488',
+      colorBackground: '#ffffff',
+      colorText: '#1e293b',
+      colorDanger: '#df1b41',
+      fontFamily: 'Outfit, sans-serif',
+      spacingUnit: '4px',
+      borderRadius: '12px',
+    },
+    rules: {
+      '.Input': {
+        border: '1px solid #e2e8f0',
+        boxShadow: 'none',
+      },
+      '.Input:focus': {
+        border: '1px solid #0d9488',
+        boxShadow: 'none',
+      },
+    }
+  };
+
+  return (
+    <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
+      <StripeCheckoutForm
+        clientSecret={clientSecret}
+        appointmentId={appointmentId}
+        amount={amount}
+        onSuccess={onSuccess}
+        onCancel={onCancel}
+      />
+    </Elements>
+  );
+}
+
