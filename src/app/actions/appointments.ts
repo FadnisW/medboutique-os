@@ -9,6 +9,15 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
+import { z } from "zod";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { sanitizeInputString } from "@/lib/sanitize";
+
+// Schemas for booking requests validation
+const slotIdSchema = z.string().uuid("Invalid slot ID format");
+const reasonSchema = z.string().max(500, "Reason length must not exceed 500 characters");
+
+
 
 /**
  * Gets all appointments for the logged-in patient.
@@ -318,9 +327,20 @@ export async function bookPatientAppointment(slotId: string, reason?: string) {
       return { success: false, error: "Forbidden: Patients only" };
     }
 
-    if (!slotId || typeof slotId !== "string") {
-      return { success: false, error: "Invalid slot ID" };
+    // Rate limiting to prevent slot flooding abuse
+    const ip = await getClientIp();
+    const rateCheck = checkRateLimit(ip, "booking");
+    if (!rateCheck.allowed) {
+      return { success: false, error: "Too many booking attempts. Please try again later." };
     }
+
+    // Validate inputs
+    const validatedSlot = slotIdSchema.safeParse(slotId);
+    if (!validatedSlot.success) {
+      return { success: false, error: "Invalid slot ID format" };
+    }
+
+    const sanitizedReason = reason ? sanitizeInputString(reasonSchema.parse(reason)) : "";
 
     const patient = await db.patientProfile.findUnique({
       where: { userId: session.user.id },
@@ -355,7 +375,7 @@ export async function bookPatientAppointment(slotId: string, reason?: string) {
           patientId: patient.id,
           doctorId: slot.doctorId,
           slotId: slotId,
-          reason: reason || "",
+          reason: sanitizedReason,
           status: AppointmentStatus.CONFIRMED,
         },
         include: {
@@ -438,6 +458,22 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
       return { success: false, error: "Forbidden: Patients only" };
     }
 
+    // Rate limiting to prevent booking hold flooding abuse
+    const ip = await getClientIp();
+    const rateCheck = checkRateLimit(ip, "booking");
+    if (!rateCheck.allowed) {
+      return { success: false, error: "Too many booking attempts. Please try again later." };
+    }
+
+    // Validate UUID patterns
+    const validatedSlot = slotIdSchema.safeParse(slotId);
+    const validatedTreatment = z.string().uuid("Invalid treatment ID format").safeParse(treatmentId);
+    if (!validatedSlot.success || !validatedTreatment.success) {
+      return { success: false, error: "Invalid booking request parameters" };
+    }
+
+    const sanitizedReason = reason ? sanitizeInputString(reasonSchema.parse(reason)) : "";
+
     const patient = await db.patientProfile.findUnique({
       where: { userId: session.user.id },
     });
@@ -499,7 +535,7 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
           where: { id: existingAppointment.id },
           data: {
             treatmentId: treatmentId,
-            reason: reason || "",
+            reason: sanitizedReason,
           },
         });
 
@@ -562,7 +598,7 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
           doctorId: slot.doctorId,
           slotId: slotId,
           treatmentId: treatmentId,
-          reason: reason || "",
+          reason: sanitizedReason,
           status: paymentAmount > 0 ? AppointmentStatus.PENDING_PAYMENT : AppointmentStatus.CONFIRMED,
         },
       });
