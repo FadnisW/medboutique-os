@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 
 /**
- * Proxy for Next.js to handle authentication and role-based access control.
+ * Middleware for Next.js to handle authentication and role-based access control.
  * It intercepts requests and redirects users based on their authentication status and role.
  * Incorporates path normalization to prevent path-traversal/bypass attacks.
  */
-export const proxy = auth((req) => {
+export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const role = req.auth?.user?.role;
@@ -81,8 +81,6 @@ export const proxy = auth((req) => {
   // Allow other authenticated requests (default fallback)
   return;
 });
-
-export default proxy;
 
 /**
  * Configuration object to specify which routes the proxy should run on.
