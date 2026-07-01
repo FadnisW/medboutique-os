@@ -3,6 +3,10 @@
 import { auth } from "@/auth";
 import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import Stripe from "stripe";
+import { z } from "zod";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
 // ── Allowed invoice statuses ──
 const VALID_INVOICE_STATUSES = new Set(["PAID", "PARTIAL", "UNPAID"]);
@@ -249,4 +253,154 @@ export async function getPatientInvoices() {
     return { success: false, error: "Failed to load invoices" };
   }
 }
+
+/**
+ * Initializes a Stripe PaymentIntent for the outstanding balance of a specific invoice.
+ */
+export async function initializeInvoicePayment(invoiceId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (!invoiceId || typeof invoiceId !== "string") {
+      return { success: false, error: "Invalid invoice ID" };
+    }
+
+    const invoice = await db.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        patient: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      return { success: false, error: "Invoice not found" };
+    }
+
+    // Verify ownership
+    if (invoice.patient.userId !== session.user.id) {
+      return { success: false, error: "Forbidden: You do not own this invoice" };
+    }
+
+    const remainingBalance = Number(invoice.amountDue) - Number(invoice.amountPaid);
+    if (remainingBalance <= 0 || invoice.status === "PAID") {
+      return { success: false, error: "Invoice is already fully paid" };
+    }
+
+    // Stripe requires a minimum charge amount corresponding to 50 USD cents (~₹40-50 in INR)
+    const stripeAmount = Math.max(Math.round(remainingBalance * 100), 5000);
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: stripeAmount,
+      currency: "inr",
+      metadata: {
+        invoiceId: invoice.id,
+        patientId: invoice.patientId,
+      },
+    });
+
+    return {
+      success: true,
+      amount: remainingBalance,
+      currency: "INR",
+      stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
+      clientSecret: paymentIntent.client_secret || "",
+    };
+  } catch (error) {
+    console.error("Error in initializeInvoicePayment:", error);
+    return { success: false, error: "Failed to initialize invoice payment session" };
+  }
+}
+
+/**
+ * Verifies that a Stripe payment for an invoice's outstanding balance was successful,
+ * updating the paid amount and invoice status in the database.
+ */
+export async function verifyInvoicePayment(payload: {
+  invoiceId: string;
+  paymentIntentId: string;
+}) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const { invoiceId, paymentIntentId } = payload;
+
+    const invoice = await db.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        patient: true,
+      },
+    });
+
+    if (!invoice) {
+      return { success: false, error: "Invoice not found" };
+    }
+
+    if (invoice.patient.userId !== session.user.id) {
+      return { success: false, error: "Forbidden: You do not own this invoice" };
+    }
+
+    const isMock = paymentIntentId.startsWith("pay_mock_");
+    let paidAmount = 0;
+
+    const remainingBalance = Number(invoice.amountDue) - Number(invoice.amountPaid);
+
+    if (isMock) {
+      paidAmount = remainingBalance;
+    } else {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (paymentIntent.status !== "succeeded") {
+        return { success: false, error: "Stripe payment has not succeeded yet" };
+      }
+      if (paymentIntent.metadata.invoiceId !== invoiceId) {
+        return { success: false, error: "Stripe PaymentIntent metadata mismatch" };
+      }
+      paidAmount = Number(paymentIntent.amount) / 100;
+    }
+
+    const newAmountPaid = Number(invoice.amountPaid) + paidAmount;
+    const isFullyPaid = newAmountPaid >= Number(invoice.amountDue);
+
+    // Record the payment entry
+    const payment = await db.payment.create({
+      data: {
+        amount: paidAmount,
+        currency: "INR",
+        gatewayReference: paymentIntentId,
+        status: "SUCCESS",
+      },
+    });
+
+    // Update the invoice status and totals
+    await db.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        amountPaid: newAmountPaid,
+        status: isFullyPaid ? "PAID" : "PARTIAL",
+        paymentId: payment.id,
+      },
+    });
+
+    revalidatePath("/portal/invoices");
+    revalidatePath("/admin/billing");
+
+    return {
+      success: true,
+      isFullyPaid,
+      amountPaid: newAmountPaid,
+    };
+  } catch (error) {
+    console.error("Error in verifyInvoicePayment:", error);
+    return { success: false, error: "Failed to verify payment on the server" };
+  }
+}
+
 

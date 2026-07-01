@@ -750,9 +750,15 @@ export async function verifyStripePayment(payload: {
       },
     });
 
+    // Generate structured invoice identification
+    const currentYear = new Date().getFullYear();
+    const uniqueNumber = Math.floor(100000 + Math.random() * 900000);
+    const invoiceId = `INV-${currentYear}-${uniqueNumber}`;
+
     // Generate Invoice record
     const invoice = await db.invoice.create({
       data: {
+        id: invoiceId,
         patientId: appointment.patientId,
         paymentId: payment.id,
         amountDue: priceNum,
