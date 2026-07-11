@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useTransition } from "react";
 import { Download, Eye, AlertTriangle, CreditCard, Receipt, Loader2, X, AlertCircle } from "lucide-react";
 import { getPatientInvoices, initializeInvoicePayment, verifyInvoicePayment } from "@/app/actions/billing";
+import { getInvoiceDetails } from "@/app/actions/invoices";
+import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
@@ -241,16 +243,29 @@ export default function InvoicesPage() {
                         {inv.status}
                       </span>
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-5 flex items-center gap-2">
                       {inv.status !== "PAID" && (
                         <button
                           onClick={() => handlePayClick(inv)}
                           disabled={isPending}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-4 py-2 rounded-xl transition-all font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-xl transition-all font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                         >
                           Settle Balance
                         </button>
                       )}
+                      <button
+                        onClick={async () => {
+                          const res = await getInvoiceDetails(inv.id);
+                          if (res.success && res.data) {
+                            generateInvoicePDF(res.data);
+                          } else {
+                            alert(res.error || "Failed to load invoice details.");
+                          }
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-3 py-1.5 rounded-xl transition-all font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </button>
                     </td>
                   </tr>
                 ))}

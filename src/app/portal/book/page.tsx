@@ -26,6 +26,8 @@ import { getPublicAvailableSlots, initializePatientBooking, verifyStripePayment,
 import { getTreatments } from "@/app/actions/treatments";
 import { getFormTemplates } from "@/app/actions/templates";
 import { completeSafetyForm, getFormInstancesForAppointment } from "@/app/actions/forms";
+import { getInvoiceDetails } from "@/app/actions/invoices";
+import { generateInvoicePDF } from "@/lib/generate-invoice-pdf";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
@@ -88,6 +90,7 @@ function BookingPortalContent() {
   const [currentFormIndex, setCurrentFormIndex] = useState(0);
   const [signatureText, setSignatureText] = useState("");
   const [confirmationDetails, setConfirmationDetails] = useState<any | null>(null);
+  const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Load Initial Data
@@ -199,6 +202,9 @@ function BookingPortalContent() {
       });
 
       if (res.success) {
+        if (res.invoiceId) {
+          setInvoiceId(res.invoiceId);
+        }
         if (res.status === "PENDING_REQUIRED_FORMS" && mandatoryTemplates.length > 0) {
           setStep("compliance");
         } else {
@@ -695,8 +701,19 @@ function BookingPortalContent() {
 
           <div className="space-y-3 pt-4 border-t border-slate-100">
             <button
-              onClick={() => alert("Digital PDF invoice generated! Download will start in a moment.")}
-              className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 text-sm flex items-center justify-center gap-2"
+              onClick={async () => {
+                if (!invoiceId) {
+                  alert("Invoice data is not available yet.");
+                  return;
+                }
+                const res = await getInvoiceDetails(invoiceId);
+                if (res.success && res.data) {
+                  generateInvoicePDF(res.data);
+                } else {
+                  alert(res.error || "Failed to load invoice details.");
+                }
+              }}
+              className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               <Download className="w-4.5 h-4.5" /> Download Invoice PDF
             </button>
