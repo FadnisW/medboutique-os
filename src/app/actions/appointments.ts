@@ -14,7 +14,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { sanitizeInputString } from "@/lib/sanitize";
 
 // Schemas for booking requests validation
-const slotIdSchema = z.string().uuid("Invalid slot ID format");
+const slotIdSchema = z.string().min(1, "Invalid slot ID");
 const reasonSchema = z.string().max(500, "Reason length must not exceed 500 characters");
 
 
@@ -465,9 +465,9 @@ export async function initializePatientBooking(slotId: string, treatmentId: stri
       return { success: false, error: "Too many booking attempts. Please try again later." };
     }
 
-    // Validate UUID patterns
+    // Validate ID patterns
     const validatedSlot = slotIdSchema.safeParse(slotId);
-    const validatedTreatment = z.string().uuid("Invalid treatment ID format").safeParse(treatmentId);
+    const validatedTreatment = z.string().min(1, "Invalid treatment ID").safeParse(treatmentId);
     if (!validatedSlot.success || !validatedTreatment.success) {
       return { success: false, error: "Invalid booking request parameters" };
     }
