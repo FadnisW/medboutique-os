@@ -1,4 +1,7 @@
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 /**
  * Middleware for Next.js to handle authentication and role-based access control.

@@ -41,5 +41,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vercel
+
+# ── TestSprite ────────────────────────────────
+/testsprite_tests/
 *.tsbuildinfo
 next-env.d.ts
