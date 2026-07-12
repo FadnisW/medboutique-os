@@ -1,12 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 
-/**
- * Edge-compatible NextAuth configuration.
- * Contains settings that do not require Node.js-specific modules (like Prisma or bcryptjs),
- * allowing it to run within Vercel Edge Middleware.
- */
 export const authConfig = {
-  providers: [], // Configured with full credentials authorize check in auth.ts
+  providers: [], // Overwritten in auth.ts
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

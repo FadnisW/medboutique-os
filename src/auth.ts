@@ -1,13 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import db from "@/lib/db";
-import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 
-/**
- * Main NextAuth configuration entrypoint.
- * Merges the edge-compatible base configuration with database-driven authentication providers.
- */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
@@ -20,6 +14,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
+
+        // Dynamic lazy imports to prevent bundling Node.js modules into Vercel Edge Middleware
+        const { default: db } = await import("@/lib/db");
+        const { default: bcrypt } = await import("bcryptjs");
 
         const user = await db.user.findUnique({
           where: {
