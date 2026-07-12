@@ -45,26 +45,31 @@ export default auth((req) => {
   // 2. Handle login route (auth route)
   if (isAuthRoute) {
     if (isLoggedIn) {
+      const redirectUrl = nextUrl.clone();
       // Redirect logged-in users to their corresponding dashboard
       if (role === "DOCTOR" || role === "RECEPTIONIST") {
-        return Response.redirect(new URL("/admin", nextUrl));
+        redirectUrl.pathname = "/admin";
+        return Response.redirect(redirectUrl);
       }
-      return Response.redirect(new URL("/portal/dashboard", nextUrl));
+      redirectUrl.pathname = "/portal/dashboard";
+      return Response.redirect(redirectUrl);
     }
     return;
   }
 
   // 3. Default-Deny Policy: Require login for all other routes
   if (!isLoggedIn) {
-    // Redirect unauthenticated requests to login page
-    return Response.redirect(new URL("/login", nextUrl));
+    const redirectUrl = nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    return Response.redirect(redirectUrl);
   }
 
   // 4. Enforce role-based access control (RBAC) on admin routes
   if (isAdminRoute) {
     if (role !== "DOCTOR" && role !== "RECEPTIONIST") {
-      // Non-admin roles redirected back to portal dashboard or login
-      return Response.redirect(new URL("/portal/dashboard", nextUrl));
+      const redirectUrl = nextUrl.clone();
+      redirectUrl.pathname = "/portal/dashboard";
+      return Response.redirect(redirectUrl);
     }
   }
 
@@ -72,7 +77,9 @@ export default auth((req) => {
   // However, DOCTOR and RECEPTIONIST should be redirected to their own dashboard
   if (isPortalRoute) {
     if (role === "DOCTOR" || role === "RECEPTIONIST") {
-      return Response.redirect(new URL("/admin", nextUrl));
+      const redirectUrl = nextUrl.clone();
+      redirectUrl.pathname = "/admin";
+      return Response.redirect(redirectUrl);
     }
     // Proceed for PATIENT
     return;
