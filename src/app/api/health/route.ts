@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/db";
+import prisma from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     // Execute a lightweight query to keep both the web server and Render database active
-    await db.$queryRaw`SELECT 1`;
+    await prisma.$queryRaw`SELECT 1`;
 
     return NextResponse.json({
       status: "online",
