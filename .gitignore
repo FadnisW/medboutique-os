@@ -37,6 +37,10 @@ Thumbs.db
 .idea/
 .vscode/settings.json
 
+# ── Scripts ───────────────────────────────────
+setup-database.bat
+push-to-github.bat
+
 # ── Misc ──────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
